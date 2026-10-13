@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !csrf_verify($_POST['csrf'] ?? ''))
     $pass  = $_POST['password'] ?? '';
 
     // Rate limiting
-    if (is_rate_limited($email)) {
+    if (login_throttled($email)) {
         $error = 'Too many login attempts. Please wait 15 minutes.';
     } else {
         $stmt = db()->prepare('SELECT id, password_hash, role FROM users WHERE email = ?');
@@ -29,15 +29,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !csrf_verify($_POST['csrf'] ?? ''))
             if ($row['role'] !== 'admin') {
                 $error = 'This account does not have admin access.';
             } else {
-                clear_login_attempts($email);
-                record_login_attempt($email, true);
+                login_succeeded($email);
                 login_user((int)$row['id'], !empty($_POST['remember']));
                 log_activity('admin_login', 'user', (int)$row['id']);
                 header('Location: ' . SITE_URL . '/admin/');
                 exit;
             }
         } else {
-            record_login_attempt($email, false);
+            login_failed($email);
             $error = 'Invalid email or password.';
         }
     }

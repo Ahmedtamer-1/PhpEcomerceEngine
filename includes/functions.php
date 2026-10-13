@@ -246,6 +246,47 @@ function clear_login_attempts(string $identifier): void
 }
 
 /**
+ * Password-login throttle keys, from tightest to loosest:
+ *   email+IP  5 / 15 min  — one person guessing one account
+ *   IP       20 / 15 min  — one IP trying many accounts (password spraying)
+ *   email    50 / 15 min  — many IPs on one account
+ * Keyed on email alone (the old way), 5 bad guesses from anyone locked the
+ * real owner — admin included — out for 15 minutes, and one IP could try
+ * every account. The email cap is loose so lockouts take real effort.
+ */
+function login_throttle_keys(string $email): array
+{
+    $email = strtolower(trim($email));
+    $ip    = get_client_ip();
+    return [
+        ['ipe:' . sha1($email . '|' . $ip), 5],
+        ['ip:' . $ip, 20],
+        [$email, 50],
+    ];
+}
+
+function login_throttled(string $email): bool
+{
+    foreach (login_throttle_keys($email) as [$key, $max]) {
+        if (is_rate_limited($key, $max)) return true;
+    }
+    return false;
+}
+
+function login_failed(string $email): void
+{
+    foreach (login_throttle_keys($email) as [$key]) record_login_attempt($key, false);
+}
+
+function login_succeeded(string $email): void
+{
+    // The IP key stays: one good login mustn't reset a spraying IP's count.
+    [$pair, , $account] = login_throttle_keys($email);
+    clear_login_attempts($pair[0]);
+    clear_login_attempts($account[0]);
+}
+
+/**
  * Generate a SHA-256 HMAC signature for data integrity.
  */
 function hmac_sign(string $data): string

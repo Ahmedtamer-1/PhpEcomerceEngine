@@ -45,22 +45,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'login') {
         $email = trim($_POST['email'] ?? '');
         $pass  = $_POST['password'] ?? '';
 
-        // Rate limiting: block after 5 failed attempts in 15 min
-        if (is_rate_limited($email)) {
+        // Rate limiting per email+IP, per IP and per email (see login_throttle_keys()).
+        if (login_throttled($email)) {
             $error = 'Too many login attempts. Please wait 15 minutes.';
         } else {
             $stmt  = db()->prepare('SELECT id, password_hash FROM users WHERE email = ?');
             $stmt->execute([$email]);
             $row = $stmt->fetch();
             if ($row && password_verify($pass, $row['password_hash'])) {
-                clear_login_attempts($email);
-                record_login_attempt($email, true);
+                login_succeeded($email);
                 login_user((int)$row['id'], !empty($_POST['remember']));
                 // Local paths only — an absolute URL here was an open redirect
                 // (a phishing link could bounce users to any site after login).
                 redirect($redirectTo);
             } else {
-                record_login_attempt($email, false);
+                login_failed($email);
                 $error = 'Invalid email or password.';
             }
         }
