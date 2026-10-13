@@ -77,7 +77,7 @@ if (isset($_GET['code'])) {
         redirect('/account.php?error=' . urlencode('Failed to retrieve user information from Google.'));
     }
     // Accounts are linked by email below, so the address must be verified.
-    if (isset($userInfo['verified_email']) && !$userInfo['verified_email']) {
+    if (empty($userInfo['verified_email'])) {
         redirect('/account.php?error=' . urlencode('Please verify your Google email address first.'));
     }
 
@@ -100,14 +100,24 @@ if (isset($_GET['code'])) {
         redirect($afterLogin);
     } else {
         // Check if user exists by email
-        $stmt = db()->prepare('SELECT id FROM users WHERE email = ?');
+        $stmt = db()->prepare('SELECT id, role FROM users WHERE email = ?');
         $stmt->execute([$email]);
         $userByEmail = $stmt->fetch();
 
-        if ($userByEmail) {
-            // User exists by email, update their google_id to link accounts
-            $update = db()->prepare('UPDATE users SET google_id = ? WHERE id = ?');
-            $update->execute([$googleId, $userByEmail['id']]);
+        if ($userByEmail && ($userByEmail['role'] ?? '') === 'admin') {
+            // Admin sign-in is password-only (admin/login.php), so resetting
+            // the password below would lock the admin out. Don't link.
+            redirect('/account.php?error=' . urlencode('Please sign in with your email and password.'));
+        } elseif ($userByEmail) {
+            // Registering doesn't verify the email, so someone could have
+            // signed up with this address first and set their own password.
+            // Google has now proven who owns the address: link it, replace
+            // the old password with a random one and drop every remember-me
+            // token, so a password set by anyone else stops working.
+            $hash = password_hash(bin2hex(random_bytes(16)), PASSWORD_BCRYPT);
+            $update = db()->prepare('UPDATE users SET google_id = ?, password_hash = ? WHERE id = ?');
+            $update->execute([$googleId, $hash, $userByEmail['id']]);
+            remember_forget_user((int)$userByEmail['id']);
             login_user((int)$userByEmail['id']);
             redirect($afterLogin);
         } else {

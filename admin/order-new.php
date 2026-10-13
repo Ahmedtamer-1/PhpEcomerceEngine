@@ -61,7 +61,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         try {
             // Same function checkout uses: same order-number format, and the
-            // same stock deduction (variant AND product totals), so cancelling
+            // same stock deduction (variant AND product totals, with the
+            // variant roll-up recomputed), so cancelling
             // or deleting this order later puts back exactly what it took.
             $orderId = create_order([
                 'user_id'          => null,
@@ -77,10 +78,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 'shipping_country' => $shippingCountry,
                 'phone'            => $phone,
                 'items'            => $items,
+                // The admin may record a sale the shelf count doesn't show yet.
+                'allow_oversell'   => true,
             ]);
-            // Keep variant products' total stock equal to the sum of variants.
-            $roll = db()->prepare('UPDATE products SET stock = (SELECT COALESCE(SUM(stock),0) FROM product_variants WHERE product_id = ?) WHERE id = ? AND has_variants = 1');
-            foreach (array_unique(array_column($items, 'product_id')) as $pid) $roll->execute([$pid, $pid]);
 
             if ($status !== 'pending') {
                 db()->prepare('UPDATE orders SET status = ? WHERE id = ?')->execute([$status, $orderId]);

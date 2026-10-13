@@ -1,0 +1,2 @@
+# Customer uploads (e.g. payment receipts) are private — never serve them directly.
+Require all denied

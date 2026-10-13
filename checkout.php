@@ -64,7 +64,13 @@ if ($phoneLabel === '' || mb_strlen($phoneLabel) > 40 || preg_match('/^[\d\s+()-
 }
 // Card payments are only offered when Paymob is fully configured.
 $onlineAvailable  = paymob_configured();
-$allowedMethods   = array_merge(['instapay'], $codAvailable ? ['cod'] : [], $onlineAvailable ? ['online'] : []);
+// InstaPay is only offered once its address is set in Settings → Payment.
+$instapayAvailable = instapay_configured();
+$allowedMethods   = array_merge($instapayAvailable ? ['instapay'] : [], $codAvailable ? ['cod'] : [], $onlineAvailable ? ['online'] : []);
+// Radio checked on load: the one just submitted, else COD, InstaPay, card.
+$checkedMethod    = in_array($_POST['payment_method'] ?? '', $allowedMethods, true)
+    ? $_POST['payment_method']
+    : (array_values(array_intersect(['cod', 'instapay', 'online'], $allowedMethods))[0] ?? '');
 
 // Fetch active shipping zones
 $zones = db()->query('SELECT id, name, cost FROM shipping_zones WHERE is_active = 1 ORDER BY sort_order ASC, name ASC')->fetchAll();
@@ -73,6 +79,17 @@ $zones = db()->query('SELECT id, name, cost FROM shipping_zones WHERE is_active 
 if (!$showSuccess && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_verify($_POST['csrf'] ?? '')) { $error = 'Invalid request.'; }
     else {
+        // A card attempt that was abandoned still holds its items. Release them
+        // before the stock check below, or the customer's own unpaid attempt
+        // could block this order (if that attempt is paid after all, the
+        // Paymob webhook revives the cancelled order).
+        $stalePendingId = $_SESSION['paymob_pending_order'] ?? null;
+        if ($stalePendingId) {
+            cancel_order((int)$stalePendingId);
+            unset($_SESSION['paymob_pending_order']);
+            $items = cart_items();
+        }
+
         $name    = trim($_POST['shipping_name'] ?? '');
         $email   = trim($_POST['email'] ?? '');
         $phone   = trim($_POST['phone'] ?? '');
@@ -160,10 +177,12 @@ if (!$showSuccess && $_SERVER['REQUEST_METHOD'] === 'POST') {
                             'price'         => item_effective_price($i),
                             'cost_price'    => $i['variant_cost_price'] ?? $i['cost_price'] ?? null,
                             'quantity'      => (int)$i['quantity'],
+                            'preorder'      => in_array((int)$i['product_id'], $preorderIds, true),
                         ];
                     }
 
                     // Insert the order
+                    $orderId = 0;
                     try {
                     $orderId = create_order([
                         'user_id'        => $user['id'] ?? null,
@@ -182,80 +201,82 @@ if (!$showSuccess && $_SERVER['REQUEST_METHOD'] === 'POST') {
                         'shipping_zone'  => $selectedZone['name'],
                         'items'          => $orderItems,
                     ]);
+                    } catch (OutOfStockException $e) {
+                        // Sold out between the stock check above and this order (another
+                        // shopper got the last one). Nothing was written.
+                        if ($discountPct > 0) welcome_discount_unclaim((int)$user['id']);
+                        $orderId = 0;
+                        $error = "Sorry, " . $e->itemName . " just sold out. Please update your bag and try again.";
                     } catch (Exception $e) {
                         if ($discountPct > 0) welcome_discount_unclaim((int)$user['id']);
                         throw $e;
                     }
-                    if ($discountPct > 0) welcome_discount_attach_order((int)$user['id'], $orderId);
-                    // Checkout lead: this one turned into an order.
-                    if (function_exists('checkout_lead_mark_ordered')) checkout_lead_mark_ordered((int)$orderId);
-                    // Demand history: what was actually bought, per product.
-                    foreach ($orderItems as $oi) {
-                        cart_event_log('purchase', (int)$oi['product_id'], $oi['variant_id'] ? (int)$oi['variant_id'] : null,
-                            (int)$oi['quantity'], (float)$oi['price'], $orderId);
-                    }
-                    // Lets this browser open its own order on pages such as
-                    // instapay-upload.php without logging in.
-                    remember_viewable_order($orderId);
-
-                    // Handle Payment Method
-                    if ($paymentMethod === 'online') {
-                        // ── Cancel any stale pending online order from a previous attempt ──
-                        $stalePendingId = $_SESSION['paymob_pending_order'] ?? null;
-                        if ($stalePendingId) {
-                            cancel_order((int)$stalePendingId);
-                            unset($_SESSION['paymob_pending_order']);
+                    if ($orderId) {
+                        if ($discountPct > 0) welcome_discount_attach_order((int)$user['id'], $orderId);
+                        // Checkout lead: this one turned into an order.
+                        if (function_exists('checkout_lead_mark_ordered')) checkout_lead_mark_ordered((int)$orderId);
+                        // Demand history: what was actually bought, per product.
+                        foreach ($orderItems as $oi) {
+                            cart_event_log('purchase', (int)$oi['product_id'], $oi['variant_id'] ? (int)$oi['variant_id'] : null,
+                                (int)$oi['quantity'], (float)$oi['price'], $orderId);
                         }
+                        // Lets this browser open its own order on pages such as
+                        // instapay-upload.php without logging in.
+                        remember_viewable_order($orderId);
 
-                        try {
-                            require_once __DIR__ . '/includes/paymob.php';
+                        // Handle Payment Method
+                        if ($paymentMethod === 'online') {
+
+                            try {
+                                require_once __DIR__ . '/includes/paymob.php';
                             
-                            $names = explode(' ', $name, 2);
-                            $billingData = [
-                                'first_name' => $names[0] ?? 'NA',
-                                'last_name' => $names[1] ?? 'NA',
-                                'email' => $email,
-                                'phone_number' => $phone,
-                                'street' => $addr,
-                                'city' => $selectedZone['name'],
-                            ];
+                                $names = explode(' ', $name, 2);
+                                $billingData = [
+                                    'first_name' => $names[0] ?? 'NA',
+                                    'last_name' => $names[1] ?? 'NA',
+                                    'email' => $email,
+                                    'phone_number' => $phone,
+                                    'street' => $addr,
+                                    'city' => $selectedZone['name'],
+                                ];
                             
-                            // round(): e.g. 199.99 * 100 is 19998.999… and the
-                            // (int) cast inside would charge one piaster short.
-                            $iframeUrl = paymob_generate_iframe_url($orderId, round($total * 100), $billingData);
+                                // round(): e.g. 199.99 * 100 is 19998.999… and the
+                                // (int) cast inside would charge one piaster short.
+                                $iframeUrl = paymob_generate_iframe_url($orderId, round($total * 100), $billingData);
                             
-                            // Clear cart since order is generated and user is leaving to pay
+                                // Clear cart since order is generated and user is leaving to pay
+                                cart_clear();
+                                $_SESSION['paymob_pending_order'] = $orderId;
+                            
+                                redirect($iframeUrl);
+                            } catch (Exception $e) {
+                                error_log('Paymob Error: ' . $e->getMessage());
+                                cancel_order($orderId);
+                                // Gateway error details go to the log, not the customer.
+                                $error = 'We could not start the card payment. Please try again or choose another payment method.';
+                            }
+
+                        } elseif ($paymentMethod === 'instapay') {
+                            db()->prepare("UPDATE orders SET status = 'pending_payment' WHERE id = ?")->execute([$orderId]);
                             cart_clear();
-                            $_SESSION['paymob_pending_order'] = $orderId;
-                            
-                            redirect($iframeUrl);
-                        } catch (Exception $e) {
-                            error_log('Paymob Error: ' . $e->getMessage());
-                            cancel_order($orderId);
-                            // Gateway error details go to the log, not the customer.
-                            $error = 'We could not start the card payment. Please try again or choose another payment method.';
+                            // InstaPay orders were the ONLY branch that never sent a
+                            // confirmation — and they are the ones that most need it,
+                            // because the email carries the payment instructions and
+                            // the pay link. Without it the customer left the success
+                            // page with no record of how to pay.
+                            require_once __DIR__ . '/includes/mailer.php';
+                            send_order_email('confirmation', $orderId);
+                            $_SESSION['order_success'] = $orderId;
+                            redirect('/checkout.php?success=1');
+                        } else {
+                            cart_clear();
+                            // COD order confirmed — send confirmation email
+                            require_once __DIR__ . '/includes/mailer.php';
+                            send_order_email('confirmation', $orderId);
+                            // Set session and redirect
+                            $_SESSION['order_success'] = $orderId;
+                            redirect('/checkout.php?success=1');
                         }
-
-                    } elseif ($paymentMethod === 'instapay') {
-                        db()->prepare("UPDATE orders SET status = 'pending_payment' WHERE id = ?")->execute([$orderId]);
-                        cart_clear();
-                        // InstaPay orders were the ONLY branch that never sent a
-                        // confirmation — and they are the ones that most need it,
-                        // because the email carries the payment instructions and
-                        // the pay link. Without it the customer left the success
-                        // page with no record of how to pay.
-                        require_once __DIR__ . '/includes/mailer.php';
-                        send_order_email('confirmation', $orderId);
-                        $_SESSION['order_success'] = $orderId;
-                        redirect('/checkout.php?success=1');
-                    } else {
-                        cart_clear();
-                        // COD order confirmed — send confirmation email
-                        require_once __DIR__ . '/includes/mailer.php';
-                        send_order_email('confirmation', $orderId);
-                        // Set session and redirect
-                        $_SESSION['order_success'] = $orderId;
-                        redirect('/checkout.php?success=1');
                     }
                 }
             }
@@ -346,14 +367,16 @@ if ($showSuccess):
                 <h3 style="margin-bottom:16px;color:var(--gold)">Complete Your Payment</h3>
                 <p style="margin-bottom:12px;color:var(--muted)">Your order has been placed, but we need you to complete the payment via InstaPay to process it.</p>
                 <ol style="color:var(--muted);margin-left:20px;line-height:1.6;margin-bottom:24px;">
-                    <li style="margin-bottom:8px">Send exactly <strong style="color:var(--gold)"><?= money((float)$order['total']) ?></strong> to the following InstaPay Address:<br><strong style="color:var(--text);display:inline-block;margin-top:4px;padding:4px 8px;background:var(--bg-body);border:1px solid var(--border);border-radius:4px;"><?= h($ipa) ?></strong><br><a href="<?= h($payLink) ?>" target="_blank" rel="noopener" style="color:var(--gold);font-size:.9rem;text-decoration:underline;display:inline-block;margin-top:8px">Or tap here to pay via InstaPay</a></li>
+                    <li style="margin-bottom:8px">Send exactly <strong style="color:var(--gold)"><?= money((float)$order['total']) ?></strong> to the following InstaPay Address:<br><strong style="color:var(--text);display:inline-block;margin-top:4px;padding:4px 8px;background:var(--bg-body);border:1px solid var(--border);border-radius:4px;"><?= h($ipa) ?></strong><?php if ($payLink): ?><br><a href="<?= h($payLink) ?>" target="_blank" rel="noopener" style="color:var(--gold);font-size:.9rem;text-decoration:underline;display:inline-block;margin-top:8px">Or tap here to pay via InstaPay</a><?php endif; ?></li>
                     <li style="margin-bottom:8px">Take a screenshot of the confirmation screen.</li>
-                    <li>Click the button below to open WhatsApp and send us the screenshot.</li>
+                    <li><?= $waLink ? 'Click the button below to open WhatsApp and send us the screenshot.' : 'Reply to your confirmation email with the screenshot.' ?></li>
                 </ol>
+                <?php if ($waLink): ?>
                 <a href="<?= h($waLink) ?>" target="_blank" rel="noopener" class="lume-btn lume-btn--full lume-btn--solid" style="background:#25D366;color:#fff;border-color:#25D366;text-align:center;">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="vertical-align:middle;margin-right:8px;margin-top:-2px"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
                     Send Receipt via WhatsApp
                 </a>
+                <?php endif; ?>
             </div>
         <?php else: ?>
             <a href="<?= SITE_URL ?>/shop.php" class="lume-btn lume-btn--solid" style="margin-top:32px">Continue Shopping</a>
@@ -454,7 +477,7 @@ endif;
                 <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px">
                     <?php if ($codAvailable): ?>
                     <label style="display:flex;align-items:center;gap:10px;padding:16px;border:1px solid var(--border);border-radius:4px;cursor:pointer" id="label-cod">
-                        <input type="radio" name="payment_method" value="cod" checked style="accent-color:var(--terracotta);width:18px;height:18px">
+                        <input type="radio" name="payment_method" value="cod" <?= $checkedMethod === 'cod' ? 'checked' : '' ?> style="accent-color:var(--terracotta);width:18px;height:18px">
                         <span><?= h($codLabel) ?> <?= $codFee > 0 ? '(+ '.money($codFee).')' : '' ?></span>
                     </label>
                     <?php elseif ($hasPreorder && $codEnabled): ?>
@@ -464,17 +487,24 @@ endif;
                     <?php endif; ?>
                     <?php if ($onlineAvailable): ?>
                     <label style="display:flex;align-items:center;gap:10px;padding:16px;border:1px solid var(--border);border-radius:4px;cursor:pointer" id="label-online">
-                        <input type="radio" name="payment_method" value="online" <?= ($_POST['payment_method'] ?? '') === 'online' ? 'checked' : '' ?> style="accent-color:var(--terracotta);width:18px;height:18px">
+                        <input type="radio" name="payment_method" value="online" <?= $checkedMethod === 'online' ? 'checked' : '' ?> style="accent-color:var(--terracotta);width:18px;height:18px">
                         <span>Credit / Debit Card</span>
                     </label>
                     <?php endif; ?>
+                    <?php if ($instapayAvailable): ?>
                     <label style="display:flex;align-items:center;gap:10px;padding:16px;border:1px solid var(--border);border-radius:4px;cursor:pointer" id="label-instapay">
-                        <input type="radio" name="payment_method" value="instapay" <?= !$codAvailable ? 'checked' : '' ?> style="accent-color:var(--terracotta);width:18px;height:18px">
+                        <input type="radio" name="payment_method" value="instapay" <?= $checkedMethod === 'instapay' ? 'checked' : '' ?> style="accent-color:var(--terracotta);width:18px;height:18px">
                         <span>InstaPay (Manual Transfer)</span>
                     </label>
+                    <?php endif; ?>
+                    <?php if (!$allowedMethods): ?>
+                    <p style="padding:12px 16px;border:1px dashed var(--border);border-radius:4px;color:var(--muted);font-size:.85rem;margin:0">
+                        Checkout is temporarily unavailable &mdash; no payment method is set up yet. Please contact us to place your order.
+                    </p>
+                    <?php endif; ?>
                 </div>
 
-                <button type="submit" class="lume-btn lume-btn--full lume-btn--solid" id="checkout-btn">Place Order — Calculating...</button>
+                <button type="submit" class="lume-btn lume-btn--full lume-btn--solid" id="checkout-btn"<?= $allowedMethods ? '' : ' disabled' ?>>Place Order — Calculating...</button>
             </form>
         </div>
         <div class="lume-checkout__summary">

@@ -184,8 +184,8 @@ $accent    = '#C4714A';
 
             <?php if ($order['payment_method'] === 'instapay'):
                 /* Shared with checkout.php and instapay-upload.php via
-                   instapay_details() (Settings → Payment, with the previous
-                   hardcoded values as fallback). */
+                   instapay_details() (Settings → Payment; empty fields are
+                   left out below). */
                 $instapay = instapay_details();
                 $ipa     = $instapay['ipa'];
                 $payLink = $instapay['link'];
@@ -200,6 +200,7 @@ $accent    = '#C4714A';
                 </p>
 
                 <!-- Primary action: go straight to InstaPay -->
+                <?php if ($payLink): ?>
                 <div style="text-align:center;margin-bottom:22px;">
                   <a href="<?= htmlspecialchars($payLink) ?>"
                      style="display:inline-block;padding:16px 44px;background:<?= $gold ?>;color:#0a0a0a;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border-radius:2px;">
@@ -209,6 +210,7 @@ $accent    = '#C4714A';
                 </div>
 
                 <p style="margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:<?= $muted ?>;">Or pay manually</p>
+                <?php endif; ?>
                 <ol style="color:<?= $muted ?>;font-size:14px;line-height:1.7;margin:0 0 20px 20px;padding:0;">
                     <li style="margin-bottom:10px">
                         Open your banking or InstaPay app and send
@@ -217,15 +219,17 @@ $accent    = '#C4714A';
                         <strong style="color:<?= $text ?>;display:inline-block;margin-top:6px;padding:6px 10px;background:#111;border:1px solid <?= $border ?>;border-radius:4px;font-size:15px;letter-spacing:.03em;"><?= htmlspecialchars($ipa) ?></strong>
                     </li>
                     <li style="margin-bottom:10px">Screenshot the confirmation screen.</li>
-                    <li>Send us that screenshot on WhatsApp so we can verify it.</li>
+                    <li><?= $waLink ? 'Send us that screenshot on WhatsApp so we can verify it.' : 'Reply to this email with that screenshot so we can verify it.' ?></li>
                 </ol>
 
+                <?php if ($waLink): ?>
                 <div style="text-align:center;">
-                  <a href="<?= $waLink ?>"
+                  <a href="<?= htmlspecialchars($waLink) ?>"
                      style="display:inline-block;padding:13px 32px;background:#25D366;color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;border-radius:2px;">
                     Send Receipt via WhatsApp
                   </a>
                 </div>
+                <?php endif; ?>
 
                 <p style="margin:18px 0 0;font-size:12px;color:<?= $muted ?>;line-height:1.6;text-align:center;">
                     Your order is held as <strong style="color:<?= $text ?>">Pending Payment</strong> until the transfer arrives.
@@ -243,9 +247,10 @@ $accent    = '#C4714A';
                 <p style="margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:<?= $muted ?>;">Need to change or cancel?</p>
                 <p style="margin:0;font-size:13px;color:<?= $muted ?>;line-height:1.7;">
                     You can cancel free of charge while the order is still <strong style="color:<?= $text ?>">Pending</strong> or
-                    <strong style="color:<?= $text ?>">Processing</strong> &mdash; message us on
-                    <a href="<?= $waLink0 ?>" style="color:<?= $gold ?>;text-decoration:underline;">WhatsApp</a>
-                    or reply to this email with your order number.
+                    <strong style="color:<?= $text ?>">Processing</strong> &mdash;
+                    <?php if ($waLink0): ?>message us on
+                    <a href="<?= htmlspecialchars($waLink0) ?>" style="color:<?= $gold ?>;text-decoration:underline;">WhatsApp</a>
+                    or <?php endif; ?>reply to this email with your order number.
                     <br><br>
                     Already delivered? See our
                     <a href="<?= $siteUrl ?>/exchange-returns.php" style="color:<?= $gold ?>;text-decoration:underline;">exchange &amp; returns policy</a>

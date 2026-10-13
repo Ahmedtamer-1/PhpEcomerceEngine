@@ -246,6 +246,47 @@ function clear_login_attempts(string $identifier): void
 }
 
 /**
+ * Password-login throttle keys, from tightest to loosest:
+ *   email+IP  5 / 15 min  — one person guessing one account
+ *   IP       20 / 15 min  — one IP trying many accounts (password spraying)
+ *   email    50 / 15 min  — many IPs on one account
+ * Keyed on email alone (the old way), 5 bad guesses from anyone locked the
+ * real owner — admin included — out for 15 minutes, and one IP could try
+ * every account. The email cap is loose so lockouts take real effort.
+ */
+function login_throttle_keys(string $email): array
+{
+    $email = strtolower(trim($email));
+    $ip    = get_client_ip();
+    return [
+        ['ipe:' . sha1($email . '|' . $ip), 5],
+        ['ip:' . $ip, 20],
+        [$email, 50],
+    ];
+}
+
+function login_throttled(string $email): bool
+{
+    foreach (login_throttle_keys($email) as [$key, $max]) {
+        if (is_rate_limited($key, $max)) return true;
+    }
+    return false;
+}
+
+function login_failed(string $email): void
+{
+    foreach (login_throttle_keys($email) as [$key]) record_login_attempt($key, false);
+}
+
+function login_succeeded(string $email): void
+{
+    // The IP key stays: one good login mustn't reset a spraying IP's count.
+    [$pair, , $account] = login_throttle_keys($email);
+    clear_login_attempts($pair[0]);
+    clear_login_attempts($account[0]);
+}
+
+/**
  * Generate a SHA-256 HMAC signature for data integrity.
  */
 function hmac_sign(string $data): string
@@ -456,6 +497,8 @@ function cart_items(): array
     $key = cart_session_key();
     $userId = is_logged_in() ? $_SESSION['user_id'] : null;
 
+    // Lines whose variant was switched off (or deleted) after being added
+    // drop out, so they can't be checked out.
     $cols = 'cs.*, p.name, p.price, p.sale_price, p.cost_price, p.image, p.slug, p.stock, p.sku, p.has_variants,
              pv.id AS pv_id, pv.size AS variant_size, pv.color_name AS variant_color,
              pv.color_hex AS variant_color_hex, pv.sku AS variant_sku,
@@ -468,7 +511,8 @@ function cart_items(): array
              FROM cart_sessions cs
              JOIN products p ON p.id = cs.product_id
              LEFT JOIN product_variants pv ON pv.id = cs.variant_id
-             WHERE cs.user_id = ? AND p.is_active = 1"
+             WHERE cs.user_id = ? AND p.is_active = 1
+               AND (cs.variant_id IS NULL OR pv.is_active = 1)"
         );
         $stmt->execute([$userId]);
     } else {
@@ -477,7 +521,8 @@ function cart_items(): array
              FROM cart_sessions cs
              JOIN products p ON p.id = cs.product_id
              LEFT JOIN product_variants pv ON pv.id = cs.variant_id
-             WHERE cs.session_key = ? AND cs.user_id IS NULL AND p.is_active = 1"
+             WHERE cs.session_key = ? AND cs.user_id IS NULL AND p.is_active = 1
+               AND (cs.variant_id IS NULL OR pv.is_active = 1)"
         );
         $stmt->execute([$key]);
     }
@@ -778,6 +823,22 @@ function generate_order_number(): string
     return 'LME-' . strtoupper(bin2hex(random_bytes(3))) . '-' . date('ymd');
 }
 
+/** Thrown by create_order() when an item sold out between the cart check and the order. */
+class OutOfStockException extends RuntimeException
+{
+    public function __construct(public readonly string $itemName)
+    {
+        parent::__construct('Out of stock: ' . $itemName);
+    }
+}
+
+/**
+ * Write an order and take its items off the shelf, all in one transaction.
+ *
+ * Items flagged 'preorder' => true, or every item when $data['allow_oversell']
+ * is set, may go past the available stock; anything else that is no longer in
+ * stock throws OutOfStockException and nothing is written.
+ */
 function create_order(array $data): int
 {
     $pdo = db();
@@ -811,6 +872,7 @@ function create_order(array $data): int
                 ]);
 
         $orderId = (int) $pdo->lastInsertId();
+        $touchedProducts = [];
 
         foreach ($data['items'] as $item) {
             $pdo->prepare(
@@ -830,15 +892,40 @@ function create_order(array $data): int
                         $item['price'] * $item['quantity'],
                     ]);
 
-            // Deduct stock
+            // Deduct stock. "stock >= ?" makes the check and the deduction one
+            // atomic step: when two shoppers race for the last item, the second
+            // UPDATE matches no row and the whole order rolls back. Pre-order
+            // lines (and admin manual orders with allow_oversell) may go past
+            // stock on purpose, so they keep clamping at 0 instead.
+            $qty    = (int)$item['quantity'];
+            $strict = empty($item['preorder']) && empty($data['allow_oversell']);
             if (!empty($item['variant_id'])) {
-                $pdo->prepare('UPDATE product_variants SET stock = GREATEST(0, stock - ?) WHERE id = ?')
-                    ->execute([$item['quantity'], $item['variant_id']]);
+                $st = $pdo->prepare($strict
+                    ? 'UPDATE product_variants SET stock = stock - ? WHERE id = ? AND stock >= ?'
+                    : 'UPDATE product_variants SET stock = GREATEST(0, stock - ?) WHERE id = ?');
+                $st->execute($strict ? [$qty, $item['variant_id'], $qty] : [$qty, $item['variant_id']]);
+                if ($strict && $st->rowCount() === 0) throw new OutOfStockException($item['name']);
             }
             if (!empty($item['product_id'])) {
-                $pdo->prepare('UPDATE products SET stock = GREATEST(0, stock - ?) WHERE id = ?')
-                    ->execute([$item['quantity'], $item['product_id']]);
+                if ($strict && empty($item['variant_id'])) {
+                    $st = $pdo->prepare('UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?');
+                    $st->execute([$qty, $item['product_id'], $qty]);
+                    if ($st->rowCount() === 0) throw new OutOfStockException($item['name']);
+                } else {
+                    $pdo->prepare('UPDATE products SET stock = GREATEST(0, stock - ?) WHERE id = ?')
+                        ->execute([$qty, $item['product_id']]);
+                }
+                $touchedProducts[(int)$item['product_id']] = true;
             }
+        }
+
+        // Variant products keep products.stock as the sum of their variants
+        // (same roll-up as _order_stock_delta()), so it can't drift.
+        foreach (array_keys($touchedProducts) as $pid) {
+            $pdo->prepare(
+                'UPDATE products SET stock = (SELECT COALESCE(SUM(stock),0) FROM product_variants WHERE product_id = ?)
+                 WHERE id = ? AND has_variants = 1'
+            )->execute([$pid, $pid]);
         }
 
         $pdo->commit();
@@ -952,19 +1039,19 @@ function order_status_releases_stock(string $status): bool
 function set_order_status(int $orderId, string $newStatus): bool
 {
     $pdo = db();
-    $stmt = $pdo->prepare('SELECT id, status FROM orders WHERE id = ?');
-    $stmt->execute([$orderId]);
-    $order = $stmt->fetch();
-    if (!$order) return false;
-
-    $old = (string)$order['status'];
-    if ($old === $newStatus) return true;
-
-    $wasReleased = order_status_releases_stock($old);
-    $nowReleased = order_status_releases_stock($newStatus);
-
     $pdo->beginTransaction();
     try {
+        // FOR UPDATE: the Paymob webhook and an admin can change the same
+        // order at once. Reading the status outside the transaction let both
+        // see "active" and both put the stock back.
+        $order = order_lock($orderId);
+        if (!$order) { $pdo->rollBack(); return false; }
+
+        $old = (string)$order['status'];
+        if ($old === $newStatus) { $pdo->commit(); return true; }
+
+        $wasReleased = order_status_releases_stock($old);
+        $nowReleased = order_status_releases_stock($newStatus);
         if (!$wasReleased && $nowReleased)      _order_stock_delta($orderId, +1);
         elseif ($wasReleased && !$nowReleased)  _order_stock_delta($orderId, -1);
 
@@ -979,58 +1066,58 @@ function set_order_status(int $orderId, string $newStatus): bool
     }
 }
 
+/** Lock an order row for the rest of the current transaction. */
+function order_lock(int $orderId): ?array
+{
+    $stmt = db()->prepare('SELECT id, status FROM orders WHERE id = ? FOR UPDATE');
+    $stmt->execute([$orderId]);
+    return $stmt->fetch() ?: null;
+}
+
 /**
- * Return an order's items to stock, for use when an order is DELETED.
+ * Delete an order, putting its items back on the shelf first, in one
+ * transaction (so a webhook can't change the order halfway through).
  *
- * Deliberately refuses orders that are already 'cancelled' or 'refunded':
- * cancel_order() restored their stock at cancellation time, so restoring
- * again here would inflate inventory by the order quantity.
- *
- * @return bool true if stock was restored, false if skipped or on error
+ * Orders already 'cancelled' or 'refunded' had their stock returned at that
+ * point, so restoring again would inflate inventory; those are deleted only.
  */
-function restore_order_stock(int $orderId): bool
+function delete_order(int $orderId): bool
 {
     $pdo = db();
-
-    $stmt = $pdo->prepare('SELECT id, status FROM orders WHERE id = ?');
-    $stmt->execute([$orderId]);
-    $order = $stmt->fetch();
-    if (!$order) {
+    $pdo->beginTransaction();
+    try {
+        $order = order_lock($orderId);
+        if (!$order) { $pdo->rollBack(); return false; }
+        if (!order_status_releases_stock((string)$order['status'])) {
+            _order_stock_delta($orderId, +1);
+        }
+        $pdo->prepare('DELETE FROM order_items WHERE order_id = ?')->execute([$orderId]);
+        $pdo->prepare('DELETE FROM orders WHERE id = ?')->execute([$orderId]);
+        $pdo->commit();
+        return true;
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        error_log('delete_order() failed for order #' . $orderId . ': ' . $e->getMessage());
         return false;
     }
-
-    // Stock for these was already returned when they were cancelled/refunded.
-    if (order_status_releases_stock((string)$order['status'])) {
-        return false;
-    }
-
-    // Shared with set_order_status() so both paths adjust stock identically
-    // and both keep the variant roll-up consistent.
-    _order_stock_delta($orderId, +1);
-    return true;
 }
 
 function cancel_order(int $orderId): bool
 {
     $pdo = db();
-
-    // Fetch current order state
-    $stmt = $pdo->prepare('SELECT id, status FROM orders WHERE id = ?');
-    $stmt->execute([$orderId]);
-    $order = $stmt->fetch();
-
-    if (!$order) {
-        return false;
-    }
-
-    // Only cancel orders that are in a cancellable state
-    $terminal = ['cancelled', 'refunded', 'delivered'];
-    if (in_array($order['status'], $terminal)) {
-        return false;
-    }
-
     $pdo->beginTransaction();
     try {
+        // Locked so a webhook and checkout (or two webhooks) can't both
+        // cancel the same order and return its stock twice.
+        $order = order_lock($orderId);
+
+        // Only cancel orders that are in a cancellable state
+        $terminal = ['cancelled', 'refunded', 'delivered'];
+        if (!$order || in_array($order['status'], $terminal, true)) {
+            $pdo->rollBack();
+            return false;
+        }
+
         // Same stock path as set_order_status(), so the variant roll-up on
         // products.stock is recomputed here too instead of drifting.
         _order_stock_delta($orderId, +1);
@@ -1441,10 +1528,9 @@ function paymob_configured(): bool
  * InstaPay payment details, used by checkout, instapay-upload.php and the
  * confirmation email so the three can never disagree.
  *
- * Read from Settings → Payment. The values that used to be hardcoded in all
- * three places are the fallbacks, and so are the old form placeholders
- * (which were once saved into the DB by mistake), so nothing changes for
- * customers until the admin enters new values.
+ * Read from Settings → Payment only. There is deliberately no built-in
+ * fallback account: an unset field is ''. The old form placeholders (which
+ * were once saved into the DB by mistake) also count as unset.
  */
 function instapay_details(): array
 {
@@ -1452,17 +1538,24 @@ function instapay_details(): array
     $wa   = preg_replace('/\D/', '', setting('instapay_whatsapp'));
     $link = trim(setting('instapay_link'));
 
-    if ($ipa === '' || $ipa === 'your_instapay_username@instapay') $ipa = 'ewan.ss@instapay';
-    if ($wa === '' || $wa === '201000000000')                       $wa  = '201004996283';
-    if ($link === '' || !preg_match('~^https://~i', $link))         $link = 'https://ipn.eg/S/ewan.ss/instapay/1ewLLG';
+    if ($ipa === 'your_instapay_username@instapay') $ipa = '';
+    if ($wa === '201000000000')                     $wa  = '';
+    if (!preg_match('~^https://~i', $link))         $link = '';
 
     return ['ipa' => $ipa, 'whatsapp' => $wa, 'link' => $link];
 }
 
-/** wa.me link to the store's InstaPay WhatsApp with a prefilled message. */
+/** InstaPay is only offered at checkout once an InstaPay address is set. */
+function instapay_configured(): bool
+{
+    return instapay_details()['ipa'] !== '';
+}
+
+/** wa.me link to the store's InstaPay WhatsApp with a prefilled message, or '' when no number is set. */
 function instapay_whatsapp_link(string $message): string
 {
-    return 'https://wa.me/' . instapay_details()['whatsapp'] . '?text=' . urlencode($message);
+    $wa = instapay_details()['whatsapp'];
+    return $wa === '' ? '' : 'https://wa.me/' . $wa . '?text=' . urlencode($message);
 }
 
 /**
