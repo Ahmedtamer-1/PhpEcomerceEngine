@@ -994,19 +994,19 @@ function order_status_releases_stock(string $status): bool
 function set_order_status(int $orderId, string $newStatus): bool
 {
     $pdo = db();
-    $stmt = $pdo->prepare('SELECT id, status FROM orders WHERE id = ?');
-    $stmt->execute([$orderId]);
-    $order = $stmt->fetch();
-    if (!$order) return false;
-
-    $old = (string)$order['status'];
-    if ($old === $newStatus) return true;
-
-    $wasReleased = order_status_releases_stock($old);
-    $nowReleased = order_status_releases_stock($newStatus);
-
     $pdo->beginTransaction();
     try {
+        // FOR UPDATE: the Paymob webhook and an admin can change the same
+        // order at once. Reading the status outside the transaction let both
+        // see "active" and both put the stock back.
+        $order = order_lock($orderId);
+        if (!$order) { $pdo->rollBack(); return false; }
+
+        $old = (string)$order['status'];
+        if ($old === $newStatus) { $pdo->commit(); return true; }
+
+        $wasReleased = order_status_releases_stock($old);
+        $nowReleased = order_status_releases_stock($newStatus);
         if (!$wasReleased && $nowReleased)      _order_stock_delta($orderId, +1);
         elseif ($wasReleased && !$nowReleased)  _order_stock_delta($orderId, -1);
 
@@ -1021,58 +1021,58 @@ function set_order_status(int $orderId, string $newStatus): bool
     }
 }
 
+/** Lock an order row for the rest of the current transaction. */
+function order_lock(int $orderId): ?array
+{
+    $stmt = db()->prepare('SELECT id, status FROM orders WHERE id = ? FOR UPDATE');
+    $stmt->execute([$orderId]);
+    return $stmt->fetch() ?: null;
+}
+
 /**
- * Return an order's items to stock, for use when an order is DELETED.
+ * Delete an order, putting its items back on the shelf first, in one
+ * transaction (so a webhook can't change the order halfway through).
  *
- * Deliberately refuses orders that are already 'cancelled' or 'refunded':
- * cancel_order() restored their stock at cancellation time, so restoring
- * again here would inflate inventory by the order quantity.
- *
- * @return bool true if stock was restored, false if skipped or on error
+ * Orders already 'cancelled' or 'refunded' had their stock returned at that
+ * point, so restoring again would inflate inventory; those are deleted only.
  */
-function restore_order_stock(int $orderId): bool
+function delete_order(int $orderId): bool
 {
     $pdo = db();
-
-    $stmt = $pdo->prepare('SELECT id, status FROM orders WHERE id = ?');
-    $stmt->execute([$orderId]);
-    $order = $stmt->fetch();
-    if (!$order) {
+    $pdo->beginTransaction();
+    try {
+        $order = order_lock($orderId);
+        if (!$order) { $pdo->rollBack(); return false; }
+        if (!order_status_releases_stock((string)$order['status'])) {
+            _order_stock_delta($orderId, +1);
+        }
+        $pdo->prepare('DELETE FROM order_items WHERE order_id = ?')->execute([$orderId]);
+        $pdo->prepare('DELETE FROM orders WHERE id = ?')->execute([$orderId]);
+        $pdo->commit();
+        return true;
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        error_log('delete_order() failed for order #' . $orderId . ': ' . $e->getMessage());
         return false;
     }
-
-    // Stock for these was already returned when they were cancelled/refunded.
-    if (order_status_releases_stock((string)$order['status'])) {
-        return false;
-    }
-
-    // Shared with set_order_status() so both paths adjust stock identically
-    // and both keep the variant roll-up consistent.
-    _order_stock_delta($orderId, +1);
-    return true;
 }
 
 function cancel_order(int $orderId): bool
 {
     $pdo = db();
-
-    // Fetch current order state
-    $stmt = $pdo->prepare('SELECT id, status FROM orders WHERE id = ?');
-    $stmt->execute([$orderId]);
-    $order = $stmt->fetch();
-
-    if (!$order) {
-        return false;
-    }
-
-    // Only cancel orders that are in a cancellable state
-    $terminal = ['cancelled', 'refunded', 'delivered'];
-    if (in_array($order['status'], $terminal)) {
-        return false;
-    }
-
     $pdo->beginTransaction();
     try {
+        // Locked so a webhook and checkout (or two webhooks) can't both
+        // cancel the same order and return its stock twice.
+        $order = order_lock($orderId);
+
+        // Only cancel orders that are in a cancellable state
+        $terminal = ['cancelled', 'refunded', 'delivered'];
+        if (!$order || in_array($order['status'], $terminal, true)) {
+            $pdo->rollBack();
+            return false;
+        }
+
         // Same stock path as set_order_status(), so the variant roll-up on
         // products.stock is recomputed here too instead of drifting.
         _order_stock_delta($orderId, +1);

@@ -10,12 +10,9 @@ $adminPage = 'orders';
 // ── DELETE ORDER ──
 if (($_GET['action'] ?? '') === 'delete' && isset($_GET['id'])) {
     $delId = (int) $_GET['id'];
-    // Put the items back into stock BEFORE the rows are removed — once
-    // order_items is gone there is no record of what to restore.
-    // Skips already-cancelled/refunded orders, whose stock is already back.
-    restore_order_stock($delId);
-    db()->prepare('DELETE FROM order_items WHERE order_id = ?')->execute([$delId]);
-    db()->prepare('DELETE FROM orders WHERE id = ?')->execute([$delId]);
+    // Puts the items back into stock (unless already cancelled/refunded)
+    // and removes the rows, in one transaction.
+    delete_order($delId);
     log_activity('delete_order', 'order', $delId);
     header('Location: ' . SITE_URL . '/admin/orders.php?msg=deleted');
     exit;
@@ -28,15 +25,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_action']) && !em
     
     // Sanitize IDs
     $cleanIds = array_map('intval', $ids);
-    $idPlaceholders = implode(',', array_fill(0, count($cleanIds), '?'));
     
     if ($action === 'delete') {
-        // Restore each order's stock before deleting its items (see single-delete above).
-        foreach ($cleanIds as $restoreId) {
-            restore_order_stock($restoreId);
+        // One at a time so each order's stock is restored with its delete.
+        foreach ($cleanIds as $delId) {
+            delete_order($delId);
         }
-        db()->prepare("DELETE FROM order_items WHERE order_id IN ($idPlaceholders)")->execute($cleanIds);
-        db()->prepare("DELETE FROM orders WHERE id IN ($idPlaceholders)")->execute($cleanIds);
         log_activity('bulk_delete_orders', 'order', 0, count($cleanIds) . " orders deleted");
         header('Location: ' . SITE_URL . '/admin/orders.php?msg=bulk_deleted');
         exit;
