@@ -533,28 +533,27 @@ require_once __DIR__ . '/includes/header.php';
         <?php
         /* The inputs used to be pre-filled with example text as their VALUE,
            so every save wrote "your_instapay_username@instapay" into the DB.
-           Now they hold only what is really saved; the value customers
-           actually see (including the built-in fallback) is the placeholder. */
-        $ipEffective = instapay_details();
+           Now they hold only what is really saved. There is no built-in
+           fallback: empty fields stay empty. */
         $ipSaved = fn($k, $placeholder) => in_array($s($k), ['', $placeholder], true) ? '' : $s($k);
         ?>
         <div class="admin-form__row-3">
             <div class="admin-form__group">
                 <label>InstaPay Address (IPA)</label>
-                <input type="text" name="instapay_username" value="<?= h($ipSaved('instapay_username', 'your_instapay_username@instapay')) ?>" placeholder="<?= h($ipEffective['ipa']) ?>">
+                <input type="text" name="instapay_username" value="<?= h($ipSaved('instapay_username', 'your_instapay_username@instapay')) ?>" placeholder="e.g. yourname@instapay">
             </div>
             <div class="admin-form__group">
                 <label>WhatsApp Number</label>
-                <input type="text" name="instapay_whatsapp" value="<?= h($ipSaved('instapay_whatsapp', '201000000000')) ?>" placeholder="<?= h($ipEffective['whatsapp']) ?>" inputmode="numeric">
+                <input type="text" name="instapay_whatsapp" value="<?= h($ipSaved('instapay_whatsapp', '201000000000')) ?>" placeholder="e.g. 2010XXXXXXXX" inputmode="numeric">
                 <span class="admin-form__hint">Include country code (e.g. 20 for Egypt) without + or 00.</span>
             </div>
             <div class="admin-form__group">
                 <label>InstaPay Payment Link</label>
-                <input type="url" name="instapay_link" value="<?= h($s('instapay_link')) ?>" placeholder="<?= h($ipEffective['link']) ?>">
+                <input type="url" name="instapay_link" value="<?= h($s('instapay_link')) ?>" placeholder="https://ipn.eg/S/…">
                 <span class="admin-form__hint">Must start with https://</span>
             </div>
         </div>
-        <span class="admin-form__hint">Leave a field empty to keep the value shown in grey. Used on checkout, the payment page and order emails.</span>
+        <span class="admin-form__hint">InstaPay is hidden at checkout until the InstaPay Address is filled in. The WhatsApp number and link are optional. Used on checkout, the payment page and order emails.</span>
     </div>
 
     <!-- ── Paymob Integration ── -->
