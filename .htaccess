@@ -15,6 +15,11 @@ RewriteRule ^api/v1/ - [F,L]
 # old files, so block them in case a copy is still on the server.
 RewriteRule ^(link|check_galleries)\.php$ - [F,L]
 
+# Old root copies of these endpoints were removed. Rewrite (not redirect, so
+# Paymob's POST body and ?hmac= survive) in case a dashboard still points here.
+RewriteRule ^paymob_callback\.php$ api/paymob_callback.php [L]
+RewriteRule ^product-feed\.php$ api/product-feed.php [L]
+
 # Old URL that the footer and llms.txt pointed at
 RewriteRule ^shipping-returns\.php$ shipping.php [R=301,L]
 
