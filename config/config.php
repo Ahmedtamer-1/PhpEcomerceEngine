@@ -26,7 +26,18 @@ if(!defined('ENV')) define('ENV', 'production'); // 'development' | 'production'
 // Detect dynamic SITE_URL if not explicitly set in .env
 if(!defined('SITE_URL')) {
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)) ? "https://" : "http://";
-    $domainName = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    // HTTP_HOST comes from the client, and SITE_URL ends up in emails and
+    // redirects, so a forged Host header must not leak into it. Set SITE_URL
+    // in .env on production; this detection is a fallback for local setups.
+    $requestHost = strtolower($_SERVER['HTTP_HOST'] ?? 'localhost');
+    $domainName = preg_match('/^[a-z0-9.-]+(:\d{1,5})?$/', $requestHost) ? $requestHost : 'localhost';
+    if (defined('ALLOWED_HOSTS') && ALLOWED_HOSTS !== '') {
+        $allowedHosts = array_map('trim', explode(',', strtolower(ALLOWED_HOSTS)));
+        if (!in_array($domainName, $allowedHosts, true)) $domainName = $allowedHosts[0];
+    }
+    if ($domainName !== $requestHost) {
+        error_log('Rejected Host header "' . substr($requestHost, 0, 100) . '"; set SITE_URL in .env.');
+    }
     
     // Auto-detect if it's in a subfolder (e.g., localhost/PHPLUME)
     $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
