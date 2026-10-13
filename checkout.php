@@ -79,6 +79,17 @@ $zones = db()->query('SELECT id, name, cost FROM shipping_zones WHERE is_active 
 if (!$showSuccess && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_verify($_POST['csrf'] ?? '')) { $error = 'Invalid request.'; }
     else {
+        // A card attempt that was abandoned still holds its items. Release them
+        // before the stock check below, or the customer's own unpaid attempt
+        // could block this order (if that attempt is paid after all, the
+        // Paymob webhook revives the cancelled order).
+        $stalePendingId = $_SESSION['paymob_pending_order'] ?? null;
+        if ($stalePendingId) {
+            cancel_order((int)$stalePendingId);
+            unset($_SESSION['paymob_pending_order']);
+            $items = cart_items();
+        }
+
         $name    = trim($_POST['shipping_name'] ?? '');
         $email   = trim($_POST['email'] ?? '');
         $phone   = trim($_POST['phone'] ?? '');
@@ -166,10 +177,12 @@ if (!$showSuccess && $_SERVER['REQUEST_METHOD'] === 'POST') {
                             'price'         => item_effective_price($i),
                             'cost_price'    => $i['variant_cost_price'] ?? $i['cost_price'] ?? null,
                             'quantity'      => (int)$i['quantity'],
+                            'preorder'      => in_array((int)$i['product_id'], $preorderIds, true),
                         ];
                     }
 
                     // Insert the order
+                    $orderId = 0;
                     try {
                     $orderId = create_order([
                         'user_id'        => $user['id'] ?? null,
@@ -188,80 +201,82 @@ if (!$showSuccess && $_SERVER['REQUEST_METHOD'] === 'POST') {
                         'shipping_zone'  => $selectedZone['name'],
                         'items'          => $orderItems,
                     ]);
+                    } catch (OutOfStockException $e) {
+                        // Sold out between the stock check above and this order (another
+                        // shopper got the last one). Nothing was written.
+                        if ($discountPct > 0) welcome_discount_unclaim((int)$user['id']);
+                        $orderId = 0;
+                        $error = "Sorry, " . $e->itemName . " just sold out. Please update your bag and try again.";
                     } catch (Exception $e) {
                         if ($discountPct > 0) welcome_discount_unclaim((int)$user['id']);
                         throw $e;
                     }
-                    if ($discountPct > 0) welcome_discount_attach_order((int)$user['id'], $orderId);
-                    // Checkout lead: this one turned into an order.
-                    if (function_exists('checkout_lead_mark_ordered')) checkout_lead_mark_ordered((int)$orderId);
-                    // Demand history: what was actually bought, per product.
-                    foreach ($orderItems as $oi) {
-                        cart_event_log('purchase', (int)$oi['product_id'], $oi['variant_id'] ? (int)$oi['variant_id'] : null,
-                            (int)$oi['quantity'], (float)$oi['price'], $orderId);
-                    }
-                    // Lets this browser open its own order on pages such as
-                    // instapay-upload.php without logging in.
-                    remember_viewable_order($orderId);
-
-                    // Handle Payment Method
-                    if ($paymentMethod === 'online') {
-                        // ── Cancel any stale pending online order from a previous attempt ──
-                        $stalePendingId = $_SESSION['paymob_pending_order'] ?? null;
-                        if ($stalePendingId) {
-                            cancel_order((int)$stalePendingId);
-                            unset($_SESSION['paymob_pending_order']);
+                    if ($orderId) {
+                        if ($discountPct > 0) welcome_discount_attach_order((int)$user['id'], $orderId);
+                        // Checkout lead: this one turned into an order.
+                        if (function_exists('checkout_lead_mark_ordered')) checkout_lead_mark_ordered((int)$orderId);
+                        // Demand history: what was actually bought, per product.
+                        foreach ($orderItems as $oi) {
+                            cart_event_log('purchase', (int)$oi['product_id'], $oi['variant_id'] ? (int)$oi['variant_id'] : null,
+                                (int)$oi['quantity'], (float)$oi['price'], $orderId);
                         }
+                        // Lets this browser open its own order on pages such as
+                        // instapay-upload.php without logging in.
+                        remember_viewable_order($orderId);
 
-                        try {
-                            require_once __DIR__ . '/includes/paymob.php';
+                        // Handle Payment Method
+                        if ($paymentMethod === 'online') {
+
+                            try {
+                                require_once __DIR__ . '/includes/paymob.php';
                             
-                            $names = explode(' ', $name, 2);
-                            $billingData = [
-                                'first_name' => $names[0] ?? 'NA',
-                                'last_name' => $names[1] ?? 'NA',
-                                'email' => $email,
-                                'phone_number' => $phone,
-                                'street' => $addr,
-                                'city' => $selectedZone['name'],
-                            ];
+                                $names = explode(' ', $name, 2);
+                                $billingData = [
+                                    'first_name' => $names[0] ?? 'NA',
+                                    'last_name' => $names[1] ?? 'NA',
+                                    'email' => $email,
+                                    'phone_number' => $phone,
+                                    'street' => $addr,
+                                    'city' => $selectedZone['name'],
+                                ];
                             
-                            // round(): e.g. 199.99 * 100 is 19998.999… and the
-                            // (int) cast inside would charge one piaster short.
-                            $iframeUrl = paymob_generate_iframe_url($orderId, round($total * 100), $billingData);
+                                // round(): e.g. 199.99 * 100 is 19998.999… and the
+                                // (int) cast inside would charge one piaster short.
+                                $iframeUrl = paymob_generate_iframe_url($orderId, round($total * 100), $billingData);
                             
-                            // Clear cart since order is generated and user is leaving to pay
+                                // Clear cart since order is generated and user is leaving to pay
+                                cart_clear();
+                                $_SESSION['paymob_pending_order'] = $orderId;
+                            
+                                redirect($iframeUrl);
+                            } catch (Exception $e) {
+                                error_log('Paymob Error: ' . $e->getMessage());
+                                cancel_order($orderId);
+                                // Gateway error details go to the log, not the customer.
+                                $error = 'We could not start the card payment. Please try again or choose another payment method.';
+                            }
+
+                        } elseif ($paymentMethod === 'instapay') {
+                            db()->prepare("UPDATE orders SET status = 'pending_payment' WHERE id = ?")->execute([$orderId]);
                             cart_clear();
-                            $_SESSION['paymob_pending_order'] = $orderId;
-                            
-                            redirect($iframeUrl);
-                        } catch (Exception $e) {
-                            error_log('Paymob Error: ' . $e->getMessage());
-                            cancel_order($orderId);
-                            // Gateway error details go to the log, not the customer.
-                            $error = 'We could not start the card payment. Please try again or choose another payment method.';
+                            // InstaPay orders were the ONLY branch that never sent a
+                            // confirmation — and they are the ones that most need it,
+                            // because the email carries the payment instructions and
+                            // the pay link. Without it the customer left the success
+                            // page with no record of how to pay.
+                            require_once __DIR__ . '/includes/mailer.php';
+                            send_order_email('confirmation', $orderId);
+                            $_SESSION['order_success'] = $orderId;
+                            redirect('/checkout.php?success=1');
+                        } else {
+                            cart_clear();
+                            // COD order confirmed — send confirmation email
+                            require_once __DIR__ . '/includes/mailer.php';
+                            send_order_email('confirmation', $orderId);
+                            // Set session and redirect
+                            $_SESSION['order_success'] = $orderId;
+                            redirect('/checkout.php?success=1');
                         }
-
-                    } elseif ($paymentMethod === 'instapay') {
-                        db()->prepare("UPDATE orders SET status = 'pending_payment' WHERE id = ?")->execute([$orderId]);
-                        cart_clear();
-                        // InstaPay orders were the ONLY branch that never sent a
-                        // confirmation — and they are the ones that most need it,
-                        // because the email carries the payment instructions and
-                        // the pay link. Without it the customer left the success
-                        // page with no record of how to pay.
-                        require_once __DIR__ . '/includes/mailer.php';
-                        send_order_email('confirmation', $orderId);
-                        $_SESSION['order_success'] = $orderId;
-                        redirect('/checkout.php?success=1');
-                    } else {
-                        cart_clear();
-                        // COD order confirmed — send confirmation email
-                        require_once __DIR__ . '/includes/mailer.php';
-                        send_order_email('confirmation', $orderId);
-                        // Set session and redirect
-                        $_SESSION['order_success'] = $orderId;
-                        redirect('/checkout.php?success=1');
                     }
                 }
             }

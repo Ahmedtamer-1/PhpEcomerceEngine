@@ -778,6 +778,22 @@ function generate_order_number(): string
     return 'LME-' . strtoupper(bin2hex(random_bytes(3))) . '-' . date('ymd');
 }
 
+/** Thrown by create_order() when an item sold out between the cart check and the order. */
+class OutOfStockException extends RuntimeException
+{
+    public function __construct(public readonly string $itemName)
+    {
+        parent::__construct('Out of stock: ' . $itemName);
+    }
+}
+
+/**
+ * Write an order and take its items off the shelf, all in one transaction.
+ *
+ * Items flagged 'preorder' => true, or every item when $data['allow_oversell']
+ * is set, may go past the available stock; anything else that is no longer in
+ * stock throws OutOfStockException and nothing is written.
+ */
 function create_order(array $data): int
 {
     $pdo = db();
@@ -811,6 +827,7 @@ function create_order(array $data): int
                 ]);
 
         $orderId = (int) $pdo->lastInsertId();
+        $touchedProducts = [];
 
         foreach ($data['items'] as $item) {
             $pdo->prepare(
@@ -830,15 +847,40 @@ function create_order(array $data): int
                         $item['price'] * $item['quantity'],
                     ]);
 
-            // Deduct stock
+            // Deduct stock. "stock >= ?" makes the check and the deduction one
+            // atomic step: when two shoppers race for the last item, the second
+            // UPDATE matches no row and the whole order rolls back. Pre-order
+            // lines (and admin manual orders with allow_oversell) may go past
+            // stock on purpose, so they keep clamping at 0 instead.
+            $qty    = (int)$item['quantity'];
+            $strict = empty($item['preorder']) && empty($data['allow_oversell']);
             if (!empty($item['variant_id'])) {
-                $pdo->prepare('UPDATE product_variants SET stock = GREATEST(0, stock - ?) WHERE id = ?')
-                    ->execute([$item['quantity'], $item['variant_id']]);
+                $st = $pdo->prepare($strict
+                    ? 'UPDATE product_variants SET stock = stock - ? WHERE id = ? AND stock >= ?'
+                    : 'UPDATE product_variants SET stock = GREATEST(0, stock - ?) WHERE id = ?');
+                $st->execute($strict ? [$qty, $item['variant_id'], $qty] : [$qty, $item['variant_id']]);
+                if ($strict && $st->rowCount() === 0) throw new OutOfStockException($item['name']);
             }
             if (!empty($item['product_id'])) {
-                $pdo->prepare('UPDATE products SET stock = GREATEST(0, stock - ?) WHERE id = ?')
-                    ->execute([$item['quantity'], $item['product_id']]);
+                if ($strict && empty($item['variant_id'])) {
+                    $st = $pdo->prepare('UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?');
+                    $st->execute([$qty, $item['product_id'], $qty]);
+                    if ($st->rowCount() === 0) throw new OutOfStockException($item['name']);
+                } else {
+                    $pdo->prepare('UPDATE products SET stock = GREATEST(0, stock - ?) WHERE id = ?')
+                        ->execute([$qty, $item['product_id']]);
+                }
+                $touchedProducts[(int)$item['product_id']] = true;
             }
+        }
+
+        // Variant products keep products.stock as the sum of their variants
+        // (same roll-up as _order_stock_delta()), so it can't drift.
+        foreach (array_keys($touchedProducts) as $pid) {
+            $pdo->prepare(
+                'UPDATE products SET stock = (SELECT COALESCE(SUM(stock),0) FROM product_variants WHERE product_id = ?)
+                 WHERE id = ? AND has_variants = 1'
+            )->execute([$pid, $pid]);
         }
 
         $pdo->commit();
