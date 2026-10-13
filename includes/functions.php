@@ -1441,10 +1441,9 @@ function paymob_configured(): bool
  * InstaPay payment details, used by checkout, instapay-upload.php and the
  * confirmation email so the three can never disagree.
  *
- * Read from Settings → Payment. The values that used to be hardcoded in all
- * three places are the fallbacks, and so are the old form placeholders
- * (which were once saved into the DB by mistake), so nothing changes for
- * customers until the admin enters new values.
+ * Read from Settings → Payment only. There is deliberately no built-in
+ * fallback account: an unset field is ''. The old form placeholders (which
+ * were once saved into the DB by mistake) also count as unset.
  */
 function instapay_details(): array
 {
@@ -1452,17 +1451,24 @@ function instapay_details(): array
     $wa   = preg_replace('/\D/', '', setting('instapay_whatsapp'));
     $link = trim(setting('instapay_link'));
 
-    if ($ipa === '' || $ipa === 'your_instapay_username@instapay') $ipa = 'ewan.ss@instapay';
-    if ($wa === '' || $wa === '201000000000')                       $wa  = '201004996283';
-    if ($link === '' || !preg_match('~^https://~i', $link))         $link = 'https://ipn.eg/S/ewan.ss/instapay/1ewLLG';
+    if ($ipa === 'your_instapay_username@instapay') $ipa = '';
+    if ($wa === '201000000000')                     $wa  = '';
+    if (!preg_match('~^https://~i', $link))         $link = '';
 
     return ['ipa' => $ipa, 'whatsapp' => $wa, 'link' => $link];
 }
 
-/** wa.me link to the store's InstaPay WhatsApp with a prefilled message. */
+/** InstaPay is only offered at checkout once an InstaPay address is set. */
+function instapay_configured(): bool
+{
+    return instapay_details()['ipa'] !== '';
+}
+
+/** wa.me link to the store's InstaPay WhatsApp with a prefilled message, or '' when no number is set. */
 function instapay_whatsapp_link(string $message): string
 {
-    return 'https://wa.me/' . instapay_details()['whatsapp'] . '?text=' . urlencode($message);
+    $wa = instapay_details()['whatsapp'];
+    return $wa === '' ? '' : 'https://wa.me/' . $wa . '?text=' . urlencode($message);
 }
 
 /**
