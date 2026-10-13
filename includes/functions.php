@@ -497,6 +497,8 @@ function cart_items(): array
     $key = cart_session_key();
     $userId = is_logged_in() ? $_SESSION['user_id'] : null;
 
+    // Lines whose variant was switched off (or deleted) after being added
+    // drop out, so they can't be checked out.
     $cols = 'cs.*, p.name, p.price, p.sale_price, p.cost_price, p.image, p.slug, p.stock, p.sku, p.has_variants,
              pv.id AS pv_id, pv.size AS variant_size, pv.color_name AS variant_color,
              pv.color_hex AS variant_color_hex, pv.sku AS variant_sku,
@@ -509,7 +511,8 @@ function cart_items(): array
              FROM cart_sessions cs
              JOIN products p ON p.id = cs.product_id
              LEFT JOIN product_variants pv ON pv.id = cs.variant_id
-             WHERE cs.user_id = ? AND p.is_active = 1"
+             WHERE cs.user_id = ? AND p.is_active = 1
+               AND (cs.variant_id IS NULL OR pv.is_active = 1)"
         );
         $stmt->execute([$userId]);
     } else {
@@ -518,7 +521,8 @@ function cart_items(): array
              FROM cart_sessions cs
              JOIN products p ON p.id = cs.product_id
              LEFT JOIN product_variants pv ON pv.id = cs.variant_id
-             WHERE cs.session_key = ? AND cs.user_id IS NULL AND p.is_active = 1"
+             WHERE cs.session_key = ? AND cs.user_id IS NULL AND p.is_active = 1
+               AND (cs.variant_id IS NULL OR pv.is_active = 1)"
         );
         $stmt->execute([$key]);
     }
