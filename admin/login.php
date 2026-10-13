@@ -78,6 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !csrf_verify($_POST['csrf'] ?? ''))
             </label>
             <button type="submit" class="admin-btn admin-btn--primary admin-btn--full">Sign In</button>
         </form>
+        <p style="text-align:center;margin:16px 0 0;font-size:.8rem"><a href="<?= SITE_URL ?>/account.php?action=forgot" style="color:inherit;opacity:.75">Forgot your password?</a></p>
         <p class="admin-login-back"><a href="<?= SITE_URL ?>/">← Back to site</a></p>
     </div>
 </body>

@@ -98,7 +98,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'register') {
     }
 }
 
-$pageTitle = $action === 'dashboard' ? 'My Account — ' . setting('site_name', SITE_NAME) : ($action === 'register' ? 'Register — ' . setting('site_name', SITE_NAME) : 'Login — ' . setting('site_name', SITE_NAME));
+// Forgotten password: ask for a reset link
+if (in_array($action, ['forgot', 'reset'], true)) {
+    require_once __DIR__ . '/includes/password-reset.php';
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'forgot') {
+    if (!csrf_verify($_POST['csrf'] ?? '')) { $error = 'Invalid request.'; }
+    else {
+        $rateKey = 'reset:' . get_client_ip();
+        if (is_rate_limited($rateKey, 5, 3600)) {
+            $error = 'Too many requests. Please try again later.';
+        } else {
+            record_login_attempt($rateKey, false);
+            $email = trim($_POST['email'] ?? '');
+            if (filter_var($email, FILTER_VALIDATE_EMAIL)) password_reset_request($email);
+            // Same answer whether or not the account exists.
+            $success = 'If an account uses that email, we have sent a link to reset your password. It expires in ' . PASSWORD_RESET_MINUTES . ' minutes.';
+        }
+    }
+}
+
+// Forgotten password: set the new one from the emailed link
+$resetToken = (string)($_POST['t'] ?? $_GET['t'] ?? '');
+if ($action === 'reset') {
+    if (password_reset_user($resetToken) === null) {
+        $error = 'This reset link is invalid or has expired. Please ask for a new one.';
+        $action = 'forgot';
+    } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $pass  = $_POST['password'] ?? '';
+        $pass2 = $_POST['password_confirm'] ?? '';
+        if (!csrf_verify($_POST['csrf'] ?? '')) { $error = 'Invalid request.'; }
+        elseif (strlen($pass) < 8) { $error = 'Password must be at least 8 characters.'; }
+        elseif ($pass !== $pass2) { $error = 'Passwords do not match.'; }
+        elseif ($userId = password_reset_complete($resetToken, $pass)) {
+            $em = db()->prepare('SELECT email FROM users WHERE id = ?');
+            $em->execute([$userId]);
+            login_succeeded((string)$em->fetchColumn());
+            login_user($userId);
+            redirect('/account.php');
+        } else {
+            $error = 'This reset link is invalid or has expired. Please ask for a new one.';
+            $action = 'forgot';
+        }
+    }
+}
+
+$pageTitle = match ($action) {
+    'dashboard' => 'My Account',
+    'register'  => 'Register',
+    'forgot', 'reset' => 'Reset Password',
+    default     => 'Login',
+} . ' — ' . setting('site_name', SITE_NAME);
 require_once __DIR__ . '/includes/header.php';
 
 if ($action === 'dashboard'):
@@ -174,6 +224,36 @@ if ($action === 'dashboard'):
     <p class="lume-auth__toggle">Already have an account? <a href="<?= SITE_URL ?>/account.php<?= $redirectQs ? '?' . h(ltrim($redirectQs, '&')) : '' ?>">Login</a></p>
 </section>
 
+<?php elseif ($action === 'forgot'): ?>
+<section class="lume-auth">
+    <h1 class="lume-auth__title">Forgot Password</h1>
+    <p class="lume-auth__sub">Enter your email and we&rsquo;ll send you a link to choose a new password.</p>
+    <?php if ($error): ?><div class="lume-alert lume-alert--error"><?= h($error) ?></div><?php endif; ?>
+    <?php if ($success): ?><div class="lume-alert lume-alert--success"><?= h($success) ?></div><?php endif; ?>
+    <form method="post" class="lume-form" action="<?= SITE_URL ?>/account.php?action=forgot">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="action" value="forgot">
+        <div class="lume-form__group"><label class="lume-form__label">Email</label><input class="lume-form__input" type="email" name="email" required autocomplete="email"></div>
+        <button type="submit" class="lume-btn lume-btn--full">Send Reset Link</button>
+    </form>
+    <p class="lume-auth__toggle">Remembered it? <a href="<?= SITE_URL ?>/account.php">Sign in</a></p>
+</section>
+
+<?php elseif ($action === 'reset'): ?>
+<section class="lume-auth">
+    <h1 class="lume-auth__title">Choose a New Password</h1>
+    <p class="lume-auth__sub">This will sign you out on every other device.</p>
+    <?php if ($error): ?><div class="lume-alert lume-alert--error"><?= h($error) ?></div><?php endif; ?>
+    <form method="post" class="lume-form" action="<?= SITE_URL ?>/account.php?action=reset">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="action" value="reset">
+        <input type="hidden" name="t" value="<?= h($resetToken) ?>">
+        <div class="lume-form__group"><label class="lume-form__label">New Password</label><input class="lume-form__input" type="password" name="password" required minlength="8" autocomplete="new-password"></div>
+        <div class="lume-form__group"><label class="lume-form__label">Confirm Password</label><input class="lume-form__input" type="password" name="password_confirm" required minlength="8" autocomplete="new-password"></div>
+        <button type="submit" class="lume-btn lume-btn--full">Save Password</button>
+    </form>
+</section>
+
 <?php else: ?>
 <section class="lume-auth">
     <h1 class="lume-auth__title">Welcome Back</h1>
@@ -202,6 +282,7 @@ if ($action === 'dashboard'):
         </label>
         <button type="submit" class="lume-btn lume-btn--full">Sign In</button>
     </form>
+    <p class="lume-auth__toggle" style="margin-top:12px"><a href="<?= SITE_URL ?>/account.php?action=forgot">Forgot your password?</a></p>
     <p class="lume-auth__toggle">Don't have an account? <a href="<?= SITE_URL ?>/account.php?action=register<?= h($redirectQs) ?>">Register</a></p>
 </section>
 <?php endif; ?>
