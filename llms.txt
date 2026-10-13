@@ -1,0 +1,27 @@
+# Adorna EG
+
+> Adorna EG is a luxury fashion brand based in Egypt, offering bespoke clothing, fine apparel, and accessories. Designed with timeless elegance and high-performance vanilla PHP e-commerce technology, Adorna provides an intuitive and seamless shopping experience.
+
+## Documentation & Pages
+- [Homepage](https://adornaeg.com/): Official homepage featuring curated collections, dynamic hero banners, and brand highlights.
+- [Shop Catalog](https://adornaeg.com/shop.php): Browse the complete luxury collection with category filtering, real-time search, and variant selection.
+- [Shopping Bag](https://adornaeg.com/cart.php): Interactive shopping bag for managing selected items and reviewing totals.
+- [Checkout](https://adornaeg.com/checkout.php): Secure checkout supporting Paymob online card payments, local digital wallets, and Cash on Delivery across Egypt.
+- [Track Order](https://adornaeg.com/track-order.php): Track shipment status and fulfillment details by order number and phone/email.
+- [About Adorna](https://adornaeg.com/about.php): Discover the heritage, philosophy, and Egyptian craftsmanship behind the Adorna brand.
+- [Contact Support](https://adornaeg.com/contact.php): Customer service contact channel and general inquiries.
+- [Privacy Policy](https://adornaeg.com/privacy.php): Customer privacy rights, cookie usage, and data protection practices.
+- [Terms of Service](https://adornaeg.com/terms.php): Terms and conditions governing store usage, orders, and sales.
+- [Shipping Policy](https://adornaeg.com/shipping.php): Nationwide delivery rates and Egyptian governorate shipping timelines.
+- [Exchange & Returns](https://adornaeg.com/exchange-returns.php): Exchange and return policies.
+
+## Brand & Product Highlights
+- **Craftsmanship:** Designed and tailored in Egypt with luxury textiles and refined silhouettes.
+- **Variant Management:** Multi-option product variants including sizes (S, M, L, XL), colors, and custom color image galleries.
+- **Nationwide Delivery:** Structured shipping zones covering Cairo, Giza, Alexandria, and all Egyptian governorates.
+- **Payment Options:** Seamless integration with Paymob (credit cards, mobile wallets) and Cash on Delivery (COD).
+
+## Technical Overview
+- **Engine:** Vanilla PHP 8+ procedural architecture designed for zero dependency overhead and maximum execution speed.
+- **Database:** Relational MySQL/MariaDB database with PDO parameterization and strict security filters.
+- **Frontend:** Responsive HTML5, custom CSS design system with CSS custom properties, and native Javascript micro-interactions.
