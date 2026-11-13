@@ -47,8 +47,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'login') {
 
         // Rate limiting per email+IP, per IP and per email (see login_throttle_keys()).
         if (login_throttled($email)) {
-            security_log('login_locked', 'critical', ['identifier' => $email, 'details' => 'storefront login blocked by rate limit']);
-            $error = 'Too many login attempts. Please wait 15 minutes.';
+            // The lock itself is logged once, in login_failed(), when the limit is reached.
+            $error = login_lockout_message($email);
         } else {
             $stmt  = db()->prepare('SELECT id, password_hash FROM users WHERE email = ?');
             $stmt->execute([$email]);
@@ -61,8 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'login') {
                 // (a phishing link could bounce users to any site after login).
                 redirect($redirectTo);
             } else {
-                login_failed($email);
+                // Log first: login_failed() may log the lock and then sleeps.
                 security_log('login_failed', 'warning', ['identifier' => $email]);
+                login_failed($email);
                 $error = 'Invalid email or password.';
             }
         }
