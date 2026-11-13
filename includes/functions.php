@@ -330,6 +330,58 @@ function verify_nonce(string $nonce, string $action, int $ttlHours = 24): bool
 }
 
 // ════════════════════════════════════════════════════════
+// PASSWORD POLICY
+// ════════════════════════════════════════════════════════
+/**
+ * Problems with a new password, as a list of readable sentences (empty = OK).
+ * Used wherever a password is set (register, reset). The browser's minlength is
+ * only a convenience; this server-side check is the control.
+ *   - 10 to 128 characters
+ *   - lowercase + uppercase + digit, unless it is a 16+ character passphrase
+ *   - not a single repeated character, not in includes/common-passwords.txt
+ *   - does not contain the email's local part or the first name (3+ characters)
+ */
+function password_policy_errors(string $password, string $email = '', string $name = ''): array
+{
+    $errors = [];
+    $len = mb_strlen($password);
+    if ($len < 10)  $errors[] = 'Use at least 10 characters.';
+    if ($len > 128) $errors[] = 'Use at most 128 characters.';
+
+    if ($len < 16) {
+        if (!preg_match('/\p{Ll}/u', $password)) $errors[] = 'Add a lowercase letter (or use a passphrase of 16+ characters).';
+        if (!preg_match('/\p{Lu}/u', $password)) $errors[] = 'Add an uppercase letter (or use a passphrase of 16+ characters).';
+        if (!preg_match('/\d/', $password))      $errors[] = 'Add a number (or use a passphrase of 16+ characters).';
+    }
+
+    if ($len > 1 && preg_match('/^(.)\1+$/us', $password)) {
+        $errors[] = 'Do not repeat a single character.';
+    }
+
+    // Common passwords, compared in lowercase. The list is loaded once per request.
+    static $common = null;
+    if ($common === null) {
+        $common = [];
+        $file = __DIR__ . '/common-passwords.txt';
+        foreach (is_readable($file) ? file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) : [] as $line) {
+            if ($line !== '' && $line[0] !== '#') $common[trim($line)] = true;
+        }
+    }
+    $lower = mb_strtolower($password);
+    if (isset($common[$lower])) $errors[] = 'This password is too common.';
+
+    $email = mb_strtolower(trim($email));
+    $local = $email !== '' ? (string)strstr($email, '@', true) : '';
+    if (($email !== '' && str_contains($lower, $email)) || (mb_strlen($local) >= 3 && str_contains($lower, $local))) {
+        $errors[] = 'Do not include your email address in the password.';
+    }
+    $first = mb_strtolower(trim(strtok(trim($name), ' ') ?: ''));
+    if (mb_strlen($first) >= 3 && str_contains($lower, $first)) $errors[] = 'Do not include your name in the password.';
+
+    return $errors;
+}
+
+// ════════════════════════════════════════════════════════
 // AUTH
 // ════════════════════════════════════════════════════════
 function current_user(): ?array
