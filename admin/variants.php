@@ -99,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (str_contains($e->getMessage(), 'Duplicate')) {
                 $error = 'This size/color combination already exists.';
             } else {
-                $error = 'Database error: ' . $e->getMessage();
+                $error = lume_error_message($e, 'The variant could not be saved');
             }
         }
     }
