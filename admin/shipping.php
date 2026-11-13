@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 log_activity('create_shipping_zone', 'shipping_zone', (int)db()->lastInsertId());
                 $success = "Zone '$name' added.";
             } catch (Exception $e) {
-                $error = "Error adding zone (maybe duplicate name?): " . $e->getMessage();
+                $error = lume_error_message($e, 'The zone could not be added (is the name already used?)');
             }
         }
     } elseif ($action === 'edit') {
