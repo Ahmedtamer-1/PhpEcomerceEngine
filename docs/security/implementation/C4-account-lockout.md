@@ -31,3 +31,5 @@
 **Result (measured):** all five checks passed. A response-time column in Burp Intruder would show the same growth as the table in check 1.
 
 **Note (existing behaviour, not changed):** a successful login clears the email's account-wide counter for every address, so one valid login from address B resets the counter that guards against many-address guessing. The tight email + address key is unaffected.
+
+**Semgrep rerun (changed files):** two results are new compared with the baseline, both false positives: `admin/login.php:69` (echoed-request: the lockout text is output through `h()` and contains no request data) and `admin/users.php:61` (open-redirect: the target is `SITE_URL` plus `/admin/users.php?id=` and an `(int)` cast id). The remaining results in these files are the same as the baseline.
