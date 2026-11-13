@@ -69,16 +69,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if (!empty($_FILES['image_file']['tmp_name']) && $_FILES['image_file']['error'] === UPLOAD_ERR_OK) {
-                // Extension comes from the detected image type, never from the
-                // uploaded filename (which could be e.g. "x.php").
-                $imgTypes = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
-                $mime = (new finfo(FILEINFO_MIME_TYPE))->file($_FILES['image_file']['tmp_name']);
-                $ext = $imgTypes[$mime] ?? null;
-                $newName = 'var_' . time() . '_' . bin2hex(random_bytes(3)) . '.' . $ext;
-                $dest = ROOT_PATH . '/assets/images/products/' . $newName;
-                if ($ext && move_uploaded_file($_FILES['image_file']['tmp_name'], $dest)) {
-                    optimize_image_in_place($dest);
-                    $imagePath = 'assets/images/products/' . $newName;
+                // Shared check (size, real type, no script-like name or content);
+                // the extension comes from the detected type, never the filename.
+                $chk = upload_check_image($_FILES['image_file'], ['user_id' => (int)$adminUser['id']]);
+                if (!$chk['ok']) {
+                    $error = 'Image not saved: ' . $chk['error'];
+                } else {
+                    $newName = upload_random_name('var', $chk['ext']);
+                    $dest = ROOT_PATH . '/assets/images/products/' . $newName;
+                    if (move_uploaded_file($_FILES['image_file']['tmp_name'], $dest)) {
+                        optimize_image_in_place($dest);
+                        $imagePath = 'assets/images/products/' . $newName;
+                    }
                 }
             }
 
