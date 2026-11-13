@@ -1,0 +1,13 @@
+CSRF-01  Missing / wrong CSRF token, 2026-11-13 20:26:04
+admin POST admin/messages.php (harmless: no action fields), admin session:
+control  with the valid token:   200
+attack   token removed:          Your session expired or the request was not valid. Please go back, reload the page and try again. [HTTP 403]
+attack   wrong token:            Your session expired or the request was not valid. Please go back, reload the page and try again. [HTTP 403]
+attack   destructive GET without token (products.php?action=delete&id=99999): 403
+storefront api/cart.php add, customer A, token removed: {"success":false,"message":"Invalid CSRF token"} [HTTP 400]
+csrf_rejected events: before=4 after=8 (expect +4)
+id	event_type	severity	user_id	identifier	ip_address	user_agent	path	details	created_at
+21	csrf_rejected	warning	2	NULL	::1	curl/8.14.1	/api/cart.php	{"method":"POST"}	2026-11-13 20:26:05
+19	csrf_rejected	warning	1	NULL	::1	curl/8.14.1	/admin/products.php	{"method":"GET"}	2026-11-13 20:26:04
+18	csrf_rejected	warning	1	NULL	::1	curl/8.14.1	/admin/messages.php	{"method":"POST"}	2026-11-13 20:26:04
+17	csrf_rejected	warning	1	NULL	::1	curl/8.14.1	/admin/messages.php	{"method":"POST"}	2026-11-13 20:26:04

@@ -1,0 +1,16 @@
+<!doctype html>
+<!-- CSRF-02 proof of concept. Served from another origin (php -S localhost:9000),
+     it auto-submits a cart "add" to the shop while the victim is logged in.
+     The request carries the victim's cookie but no CSRF token, so the shop must refuse it. -->
+<html>
+<head><meta charset="utf-8"><title>Free gift!</title></head>
+<body>
+  <h1>Claim your free gift…</h1>
+  <form id="f" method="POST" action="http://localhost:8090/api/cart.php">
+    <input type="hidden" name="action" value="add">
+    <input type="hidden" name="product_id" value="3">
+    <input type="hidden" name="quantity" value="5">
+  </form>
+  <script>document.getElementById('f').submit();</script>
+</body>
+</html>

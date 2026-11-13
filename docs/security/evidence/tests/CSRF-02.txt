@@ -1,0 +1,8 @@
+CSRF-02  Cross-origin forged cart POST, customer A, 2026-11-13 20:58:46
+Simulates evidence/burp/csrf-poc.html (served from http://localhost:9000) auto-submitting to :8090.
+Request carries A's session cookie and Origin: http://localhost:9000, but NO csrf token.
+  result: {"success":false,"message":"Invalid CSRF token"} [HTTP 400]
+  A's cart after the attack (expect 0 items): 0
+  control: the same request WITH a valid token from A's own page:
+    {"success":true,"count":1,"meta_event_id":"atc_23f275732e110bee"} [HTTP 200]
+  csrf_rejected events now: 1
