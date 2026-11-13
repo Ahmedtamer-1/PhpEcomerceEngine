@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         log_activity('update_page_content', 'system');
         $success = 'Page content saved successfully.';
     } catch (Exception $e) {
-        $error = 'Error saving content: ' . $e->getMessage();
+        $error = lume_error_message($e, 'The content could not be saved');
     }
 }
 
