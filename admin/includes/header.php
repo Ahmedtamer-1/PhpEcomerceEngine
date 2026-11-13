@@ -27,7 +27,7 @@ $totalNotifs = $unreadMessages + $pendingOrders;
     <meta name="csrf-token" content="<?= h(csrf_token()) ?>">
     <?php require __DIR__ . '/csrf-script.php'; ?>
     <?php if (in_array($adminPage, ['dashboard', 'analytics', 'demand'], true)): /* only these pages draw charts */ ?>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js" defer integrity="sha256-dEAdc43T4D7l37O2hBIQ/ixOrYqWDEARykugt4qf2PM=" crossorigin="anonymous"></script>
     <?php endif; ?>
     <?php /* Versioned by file mtime: time() made every page view re-download the CSS. */ ?>
     <link rel="stylesheet" href="<?= SITE_URL ?>/admin/assets/css/admin.css?v=<?= filemtime(__DIR__ . '/../assets/css/admin.css') ?>">
