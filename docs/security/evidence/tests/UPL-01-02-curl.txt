@@ -1,0 +1,22 @@
+UPL-01 / UPL-02  File upload security (admin Media -> api/media.php), 2026-11-13 20:58:11
+Field is files[]; server detects the real MIME via finfo (H3 shared upload_check_image), extension from the detected type, random name.
+
+UPL-01 (malicious uploads rejected):
+  shell.php        (plain PHP)                 -> rejected (invalid file type)
+  shell.php.jpg    (PHP bytes, .jpg name)      -> rejected (content detected as PHP, name ignored)
+  php-in-jpg.jpg   (JPEG magic header + PHP)   -> rejected (not a valid image)
+  -> 3 upload_rejected events logged in Security Events (H3 + C1).
+
+UPL-02 (valid image accepted + stored safely):
+  real-ring.jpg (genuine 200x200 JPEG) -> accepted.
+  Original name discarded; stored as: assets/images/products/media_9ab3697bfd4d6810b98b14d5a21c6f7d.jpg
+  Filename is media_<32 hex> (random, bin2hex(random_bytes(16))); extension .jpg from the detected type.
+
+UPL-02 second half (no code execution under assets/):
+  GET the stored image directly:
+    assets/images/products/media_9ab3697bfd4d6810b98b14d5a21c6f7d.jpg -> HTTP 200, type image/jpeg
+  Rename test earlier (SCRIPT PROBE): any .php/.phtml under assets/ -> 403 (assets/.htaccess). See UPL-02.txt.
+
+Note: the Apache PHP had GD disabled during the first manual attempt, so the browser showed
+'Call to undefined function imagecreatefromjpeg()' AFTER the file passed the security check.
+GD was enabled (extension=gd) and Apache restarted; the upload then stored normally. Security logic unchanged.

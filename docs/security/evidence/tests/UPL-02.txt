@@ -1,0 +1,4 @@
+UPL-02 (part)  Scripts never run from assets/, 2026-11-13 20:26:10
+GET /assets/zz-upl02-probe.php -> executed=0 l> [HTTP 403]
+GET /assets/zz-upl02-probe.phtml -> executed=0 l> [HTTP 403]
+Probe files removed: 0 left
