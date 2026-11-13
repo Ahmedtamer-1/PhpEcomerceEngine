@@ -6,6 +6,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/meta-capi.php';
 require_once __DIR__ . '/analytics.php';
 require_once __DIR__ . '/media-video.php';
+require_once __DIR__ . '/security-log.php';
 
 // ════════════════════════════════════════════════════════
 // SESSION
@@ -160,7 +161,13 @@ function csrf_token(): string
 function csrf_verify(string $token): bool
 {
     $expected = $_SESSION[CSRF_TOKEN_NAME] ?? '';
-    return $expected !== '' && hash_equals($expected, $token);
+    $ok = $expected !== '' && hash_equals($expected, $token);
+    // Every rejection is logged here (storefront forms, APIs and the admin
+    // guard all go through this one function). The token itself is never logged.
+    if (!$ok) {
+        security_log('csrf_rejected', 'warning', ['details' => ['method' => $_SERVER['REQUEST_METHOD'] ?? '']]);
+    }
+    return $ok;
 }
 
 /**
@@ -383,6 +390,7 @@ function cart_merge_guest(int $userId): void
 function logout_user(): void
 {
     lume_session_start();
+    if (!empty($_SESSION['user_id'])) security_log('logout', 'info', ['user_id' => (int)$_SESSION['user_id']]);
     remember_forget();
     $_SESSION = [];
     if (ini_get('session.use_cookies')) {
@@ -1284,8 +1292,10 @@ function media_upload(array $file, ?int $userId = null): ?array
         'image/svg+xml' => 'svg'
     ];
 
-    if (!array_key_exists($mime, $allowedMimes))
+    if (!array_key_exists($mime, $allowedMimes)) {
+        security_log('upload_rejected', 'warning', ['user_id' => $userId, 'details' => ['reason' => 'mime not allowed', 'mime' => $mime, 'client_name' => $file['name'] ?? '']]);
         return null;
+    }
 
     $ext = $allowedMimes[$mime];
     $newName = 'media_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
