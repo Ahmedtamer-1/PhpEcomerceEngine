@@ -78,8 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'register') {
 
         if (!$fn || !$ln || !$email || !$pass) { $error = 'All fields are required.'; }
         elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) { $error = 'Invalid email.'; }
-        elseif (strlen($pass) < 8) { $error = 'Password must be at least 8 characters.'; }
         elseif (mb_strlen($fn) > 100 || mb_strlen($ln) > 100) { $error = 'Name is too long.'; }
+        elseif ($policy = password_policy_errors($pass, $email, $fn)) { $error = 'Choose a stronger password. ' . implode(' ', $policy); }
         elseif ($pass !== $pass2) { $error = 'Passwords do not match.'; }
         else {
             $exists = db()->prepare('SELECT id FROM users WHERE email = ?');
@@ -121,14 +121,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'forgot') {
 // Forgotten password: set the new one from the emailed link
 $resetToken = (string)($_POST['t'] ?? $_GET['t'] ?? '');
 if ($action === 'reset') {
-    if (password_reset_user($resetToken) === null) {
+    $resetUserId = password_reset_user($resetToken);
+    if ($resetUserId === null) {
         $error = 'This reset link is invalid or has expired. Please ask for a new one.';
         $action = 'forgot';
     } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pass  = $_POST['password'] ?? '';
         $pass2 = $_POST['password_confirm'] ?? '';
+        // The policy also forbids the account's own email and first name.
+        $who = db()->prepare('SELECT email, first_name FROM users WHERE id = ?');
+        $who->execute([$resetUserId]);
+        $whoRow = $who->fetch() ?: ['email' => '', 'first_name' => ''];
         if (!csrf_verify($_POST['csrf'] ?? '')) { $error = 'Invalid request.'; }
-        elseif (strlen($pass) < 8) { $error = 'Password must be at least 8 characters.'; }
+        elseif ($policy = password_policy_errors($pass, (string)$whoRow['email'], (string)$whoRow['first_name'])) { $error = 'Choose a stronger password. ' . implode(' ', $policy); }
         elseif ($pass !== $pass2) { $error = 'Passwords do not match.'; }
         elseif ($userId = password_reset_complete($resetToken, $pass)) {
             $em = db()->prepare('SELECT email FROM users WHERE id = ?');
@@ -217,8 +222,9 @@ if ($action === 'dashboard'):
             <div class="lume-form__group"><label class="lume-form__label">Last Name</label><input class="lume-form__input" type="text" name="last_name" required></div>
         </div>
         <div class="lume-form__group"><label class="lume-form__label">Email</label><input class="lume-form__input" type="email" name="email" required></div>
-        <div class="lume-form__group"><label class="lume-form__label">Password</label><input class="lume-form__input" type="password" name="password" required></div>
-        <div class="lume-form__group"><label class="lume-form__label">Confirm Password</label><input class="lume-form__input" type="password" name="password_confirm" required></div>
+        <div class="lume-form__group"><label class="lume-form__label">Password</label><input class="lume-form__input" type="password" name="password" required minlength="10" maxlength="128" autocomplete="new-password"></div>
+        <p style="font-size:.78rem;color:var(--muted);margin:-8px 0 16px">At least 10 characters with a lowercase letter, an uppercase letter and a number &mdash; or a passphrase of 16+ characters. No common passwords, and not your name or email.</p>
+        <div class="lume-form__group"><label class="lume-form__label">Confirm Password</label><input class="lume-form__input" type="password" name="password_confirm" required minlength="10" maxlength="128" autocomplete="new-password"></div>
         <button type="submit" class="lume-btn lume-btn--full">Create Account</button>
     </form>
     <p class="lume-auth__toggle">Already have an account? <a href="<?= SITE_URL ?>/account.php<?= $redirectQs ? '?' . h(ltrim($redirectQs, '&')) : '' ?>">Login</a></p>
@@ -248,8 +254,9 @@ if ($action === 'dashboard'):
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
         <input type="hidden" name="action" value="reset">
         <input type="hidden" name="t" value="<?= h($resetToken) ?>">
-        <div class="lume-form__group"><label class="lume-form__label">New Password</label><input class="lume-form__input" type="password" name="password" required minlength="8" autocomplete="new-password"></div>
-        <div class="lume-form__group"><label class="lume-form__label">Confirm Password</label><input class="lume-form__input" type="password" name="password_confirm" required minlength="8" autocomplete="new-password"></div>
+        <div class="lume-form__group"><label class="lume-form__label">New Password</label><input class="lume-form__input" type="password" name="password" required minlength="10" maxlength="128" autocomplete="new-password"></div>
+        <p style="font-size:.78rem;color:var(--muted);margin:-8px 0 16px">At least 10 characters with a lowercase letter, an uppercase letter and a number &mdash; or a passphrase of 16+ characters. No common passwords, and not your name or email.</p>
+        <div class="lume-form__group"><label class="lume-form__label">Confirm Password</label><input class="lume-form__input" type="password" name="password_confirm" required minlength="10" maxlength="128" autocomplete="new-password"></div>
         <button type="submit" class="lume-btn lume-btn--full">Save Password</button>
     </form>
 </section>
