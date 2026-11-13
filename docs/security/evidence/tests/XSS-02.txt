@@ -1,0 +1,8 @@
+XSS-02  Stored XSS: contact form -> admin Messages, 2026-11-13 20:18:24
+guest submits name/subject/message = <img src=x onerror=alert(1)>
+  api/contact.php -> {"success":true,"message":"Message sent successfully! We'll get back to you soon."} [HTTP 200]
+stored in DB as-is (escaping happens on output):
+id	name	subject
+1	<img src=x onerror=alert(1)>	<img src=x onerror=alert(1)>
+admin/messages.php as admin: raw '<img src=x onerror' = 0, escaped '&lt;img src=x onerror' = 2
+admin/index.php (dashboard): raw=0 escaped=0
