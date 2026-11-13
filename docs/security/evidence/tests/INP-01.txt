@@ -1,0 +1,13 @@
+INP-01  Cart quantity tampering, customer A, api/cart.php, 2026-11-13 20:25:25
+Product 1 stock = 10 (no variants). Pass: never more than stock, never below 1, no PHP error.
+control  add quantity=1:        {"success":true,"count":1,"meta_event_id":"atc_39f8797db4cb287a"} [HTTP 200]
+attack   add quantity=-5:       {"success":true,"count":2,"meta_event_id":"atc_d25502eef3146d99"} [HTTP 200]
+attack   add quantity=0:        {"success":true,"count":3,"meta_event_id":"atc_322d30cf02cf71cf"} [HTTP 200]
+attack   add quantity=999999:   {"success":false,"message":"Only 10 available in stock."} [HTTP 400]
+attack   add quantity[]=1:      {"success":true,"count":4,"meta_event_id":"atc_9324ce5bbdfd28e4"} [HTTP 200]
+attack   add product_id=abc:    {"success":false,"message":"Invalid product"} [HTTP 400]
+attack   update quantity=999999: {"success":false,"message":"Only 10 available in stock.","max_stock":10} [HTTP 400]
+attack   update quantity=-3:     {"success":true,"count":1} [HTTP 200]
+Cart in the database afterwards:
+cart_id	product_id	variant_id	quantity
+1	1	NULL	1

@@ -38,3 +38,21 @@ Verdicts: **TP** = true positive (becomes a finding) · **FP** = false positive 
 | CFG-05 | Deprecated `X-XSS-Protection` header still sent | `.htaccess:48` | Info |
 
 CVSS 3.1 scores are assigned in the report once each finding is confirmed by a dynamic or manual test.
+
+---
+
+## Before → after Part 1 (rerun 2026-11-13)
+
+Same command and rulesets as the baseline (`evidence/semgrep/semgrep-before.*` vs `semgrep-after.*`). Raw totals barely move (201 → 199): nearly all results are the already-triaged false positives (output escaped with `h()`, prepared statements, whitelisted `ORDER BY`), and their **line numbers shift** when Part 1 adds code, so a diff of counts is noise. What matters is that every true positive from the baseline is gone:
+
+| Baseline finding | Rule | Before | After | Status |
+|---|---|---|---|---|
+| SAST-01 raw exception text on 6 admin screens (`pages.php:35`, `settings.php:96`, `shipping.php:28`, `themes.php:19` & `:74`, `variants.php:102`) | `lumeegy-exception-message-to-user` | 6 of these | **0 of these** | ✅ Fixed by C3/S1. The 7 remaining hits are in other files (`api/admin-products.php`, `section-preview.php`) — out of the S1 scope, already logged as low-value. |
+| SAST-02 order status changed without `set_order_status()` (`admin/order-new.php:86`, `checkout.php:260`) | `lumeegy-direct-order-status-update` | 5 | 3 | ✅ Fixed by S2. The 3 left are the canonical functions themselves (`includes/functions.php:1175/1204/1273`) — the intended false positives. |
+| SAST-03 `db()->quote()` instead of a placeholder (`admin/abandoned.php:46`) | `quote-instead-of-placeholder` | 1 | **0** | ✅ Fixed by S3 — now a bound `?` placeholder. |
+
+### One rule went up (0 → 2) and it is a false positive
+
+`lumeegy-upload-without-mime-check` now flags `admin/settings.php` and `admin/variants.php`. Both call the **shared** `upload_check_image()` (H3) before `move_uploaded_file()`, with the saved extension taken from the detected MIME type. The rule only recognises an inline `finfo` in the same function, so centralising the check (the secure design) trips it. Marked FP; the check is present in `includes/functions.php` (`upload_check_image_path()`, `finfo` at :1484).
+
+**Net:** 0 High findings before and after; all three static true positives closed; no new real issue introduced.

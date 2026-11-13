@@ -1,0 +1,126 @@
+1.10.11#pip
+
+Press Enter to continue...
+[20:15:01] [ERROR] exit
+
+===== sqlmap -u "http://localhost:8090/shop.php?q=ring" --batch --level 2 --risk 1
+[*] starting @ 20:15:03 /2026-11-13/
+[20:15:03] [WARNING] using 'C:\Users\DELL\AppData\Local\Temp\claude\34ef13e672ac9525\774fe51a-8204-4b74-8604-dceba9885d73\scratchpad\sqlmap' as the output directory
+[20:15:03] [INFO] testing connection to the target URL
+[20:15:03] [INFO] testing if the target URL content is stable
+[20:15:04] [INFO] testing if GET parameter 'q' is dynamic
+[20:15:04] [INFO] GET parameter 'q' appears to be dynamic
+[20:15:04] [WARNING] heuristic (basic) test shows that GET parameter 'q' might not be SQL injectable
+[20:15:04] [INFO] testing for SQL injection on GET parameter 'q'
+[20:15:04] [INFO] testing 'AND boolean-based blind - WHERE or HAVING clause'
+[20:15:04] [WARNING] reflective value(s) found and filtering out
+[20:15:06] [INFO] testing 'AND boolean-based blind - WHERE or HAVING clause (subquery - comment)'
+[20:15:08] [INFO] testing 'AND boolean-based blind - WHERE or HAVING clause (comment)'
+[20:15:09] [INFO] testing 'MySQL RLIKE boolean-based blind - WHERE, HAVING, ORDER BY or GROUP BY clause'
+[20:15:11] [INFO] testing 'PostgreSQL AND boolean-based blind - WHERE or HAVING clause (CAST)'
+[20:15:13] [INFO] testing 'Oracle AND boolean-based blind - WHERE or HAVING clause (CTXSYS.DRITHSX.SN)'
+[20:15:15] [INFO] testing 'SQLite AND boolean-based blind - WHERE or HAVING clause (JSON)'
+[20:15:17] [INFO] testing 'Boolean-based blind - Parameter replace (original value)'
+[20:15:18] [INFO] testing 'Boolean-based blind - Parameter replace (DUAL)'
+[20:15:18] [INFO] testing 'Boolean-based blind - Parameter replace (CASE)'
+[20:15:18] [INFO] testing 'MySQL >= 5.0 boolean-based blind - ORDER BY, GROUP BY clause'
+[20:15:18] [INFO] testing 'PostgreSQL boolean-based blind - ORDER BY, GROUP BY clause'
+[20:15:18] [INFO] testing 'MySQL >= 5.6 AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (GTID_SUBSET)'
+[20:15:19] [INFO] testing 'MySQL >= 5.1 AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (EXTRACTVALUE)'
+[20:15:20] [INFO] testing 'PostgreSQL AND error-based - WHERE or HAVING clause'
+[20:15:21] [INFO] testing 'Microsoft SQL Server/Sybase AND error-based - WHERE or HAVING clause (IN)'
+[20:15:22] [INFO] testing 'Microsoft SQL Server/Sybase AND error-based - WHERE or HAVING clause (CONVERT)'
+[20:15:23] [INFO] testing 'Microsoft SQL Server/Sybase AND error-based - WHERE or HAVING clause (CONCAT)'
+[20:15:23] [INFO] testing 'Oracle AND error-based - WHERE or HAVING clause (XMLType)'
+[20:15:24] [INFO] testing 'Oracle AND error-based - WHERE or HAVING clause (DBMS_UTILITY.SQLID_TO_SQLHASH)'
+[20:15:25] [INFO] testing 'H2 AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (CAST)'
+[20:15:26] [INFO] testing 'SQLite >= 3.9 AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (JSON path)'
+[20:15:27] [INFO] testing 'MySQL >= 5.1 error-based - Parameter replace (EXTRACTVALUE)'
+[20:15:27] [INFO] testing 'PostgreSQL error-based - Parameter replace'
+[20:15:27] [INFO] testing 'Microsoft SQL Server error-based - Stacking (RAISERROR)'
+[20:15:28] [INFO] testing 'Microsoft SQL Server/Sybase error-based - Stacking (EXEC)'
+[20:15:29] [INFO] testing 'Generic inline queries'
+[20:15:29] [INFO] testing 'MySQL inline queries'
+[20:15:29] [INFO] testing 'PostgreSQL inline queries'
+[20:15:29] [INFO] testing 'Microsoft SQL Server/Sybase inline queries'
+[20:15:29] [INFO] testing 'Oracle inline queries'
+[20:15:29] [INFO] testing 'MySQL >= 5.0.12 stacked queries (comment)'
+[20:15:30] [INFO] testing 'PostgreSQL > 8.1 stacked queries (comment)'
+[20:15:30] [INFO] testing 'Microsoft SQL Server/Sybase stacked queries (comment)'
+[20:15:31] [INFO] testing 'Microsoft SQL Server/Sybase stacked queries (DECLARE - comment)'
+[20:15:31] [INFO] testing 'Oracle stacked queries (DBMS_PIPE.RECEIVE_MESSAGE - comment)'
+[20:15:32] [INFO] testing 'MySQL >= 5.0.12 AND time-based blind (query SLEEP)'
+[20:15:33] [INFO] testing 'MySQL >= 5.0.12 AND time-based blind (SLEEP)'
+[20:15:34] [INFO] testing 'MySQL >= 5.0.12 RLIKE time-based blind'
+[20:15:34] [INFO] testing 'PostgreSQL > 8.1 AND time-based blind'
+[20:15:35] [INFO] testing 'Microsoft SQL Server/Sybase time-based blind (IF)'
+[20:15:36] [INFO] testing 'Oracle AND time-based blind'
+[20:15:37] [INFO] testing 'CUBRID AND time-based blind (SLEEP)'
+[20:15:38] [INFO] testing 'CUBRID OR time-based blind (SLEEP)'
+[20:15:39] [INFO] testing 'MySQL >= 5.0.12 time-based blind - Parameter replace'
+[20:15:39] [INFO] testing 'Generic UNION query (NULL) - 1 to 10 columns'
+[20:15:41] [INFO] testing 'MySQL UNION query (NULL) - 1 to 10 columns'
+[20:15:44] [WARNING] GET parameter 'q' does not seem to be injectable
+[20:15:44] [CRITICAL] all tested parameters do not appear to be injectable. Try to increase values for '--level'/'--risk' options if you wish to perform more tests. If you suspect that there is some kind of protection mechanism involved (e.g. WAF) maybe you could try to use option '--tamper' (e.g. '--tamper=space2comment') and/or switch '--random-agent'
+[*] ending @ 20:15:44 /2026-11-13/
+
+===== sqlmap -u "http://localhost:8090/product.php?slug=test-ring-classic" --batch --level 2 --risk 1
+[*] starting @ 20:15:47 /2026-11-13/
+[20:15:47] [WARNING] using 'C:\Users\DELL\AppData\Local\Temp\claude\34ef13e672ac9525\774fe51a-8204-4b74-8604-dceba9885d73\scratchpad\sqlmap' as the output directory
+[20:15:47] [INFO] testing connection to the target URL
+[20:15:48] [INFO] testing if the target URL content is stable
+[20:15:49] [INFO] testing if GET parameter 'slug' is dynamic
+[20:15:49] [WARNING] GET parameter 'slug' does not appear to be dynamic
+[20:15:49] [WARNING] heuristic (basic) test shows that GET parameter 'slug' might not be SQL injectable
+[20:15:50] [INFO] testing for SQL injection on GET parameter 'slug'
+[20:15:50] [INFO] testing 'AND boolean-based blind - WHERE or HAVING clause'
+[20:15:52] [INFO] testing 'AND boolean-based blind - WHERE or HAVING clause (subquery - comment)'
+[20:15:53] [INFO] testing 'AND boolean-based blind - WHERE or HAVING clause (comment)'
+[20:15:54] [INFO] testing 'MySQL RLIKE boolean-based blind - WHERE, HAVING, ORDER BY or GROUP BY clause'
+[20:15:55] [INFO] testing 'PostgreSQL AND boolean-based blind - WHERE or HAVING clause (CAST)'
+[20:15:56] [INFO] testing 'Oracle AND boolean-based blind - WHERE or HAVING clause (CTXSYS.DRITHSX.SN)'
+[20:15:58] [INFO] testing 'SQLite AND boolean-based blind - WHERE or HAVING clause (JSON)'
+[20:15:59] [INFO] testing 'Boolean-based blind - Parameter replace (original value)'
+[20:15:59] [INFO] testing 'Boolean-based blind - Parameter replace (DUAL)'
+[20:15:59] [INFO] testing 'Boolean-based blind - Parameter replace (CASE)'
+[20:15:59] [INFO] testing 'MySQL >= 5.0 boolean-based blind - ORDER BY, GROUP BY clause'
+[20:15:59] [INFO] testing 'PostgreSQL boolean-based blind - ORDER BY, GROUP BY clause'
+[20:15:59] [INFO] testing 'MySQL >= 5.6 AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (GTID_SUBSET)'
+[20:16:00] [INFO] testing 'MySQL >= 5.1 AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (EXTRACTVALUE)'
+[20:16:01] [INFO] testing 'PostgreSQL AND error-based - WHERE or HAVING clause'
+[20:16:01] [INFO] testing 'Microsoft SQL Server/Sybase AND error-based - WHERE or HAVING clause (IN)'
+[20:16:02] [INFO] testing 'Microsoft SQL Server/Sybase AND error-based - WHERE or HAVING clause (CONVERT)'
+[20:16:03] [INFO] testing 'Microsoft SQL Server/Sybase AND error-based - WHERE or HAVING clause (CONCAT)'
+[20:16:03] [INFO] testing 'Oracle AND error-based - WHERE or HAVING clause (XMLType)'
+[20:16:04] [INFO] testing 'Oracle AND error-based - WHERE or HAVING clause (DBMS_UTILITY.SQLID_TO_SQLHASH)'
+[20:16:04] [INFO] testing 'H2 AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (CAST)'
+[20:16:05] [INFO] testing 'SQLite >= 3.9 AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (JSON path)'
+[20:16:06] [INFO] testing 'MySQL >= 5.1 error-based - Parameter replace (EXTRACTVALUE)'
+[20:16:06] [INFO] testing 'PostgreSQL error-based - Parameter replace'
+[20:16:06] [INFO] testing 'Microsoft SQL Server error-based - Stacking (RAISERROR)'
+[20:16:06] [INFO] testing 'Microsoft SQL Server/Sybase error-based - Stacking (EXEC)'
+[20:16:07] [INFO] testing 'Generic inline queries'
+[20:16:07] [INFO] testing 'MySQL inline queries'
+[20:16:07] [INFO] testing 'PostgreSQL inline queries'
+[20:16:07] [INFO] testing 'Microsoft SQL Server/Sybase inline queries'
+[20:16:07] [INFO] testing 'Oracle inline queries'
+[20:16:07] [INFO] testing 'MySQL >= 5.0.12 stacked queries (comment)'
+[20:16:08] [INFO] testing 'PostgreSQL > 8.1 stacked queries (comment)'
+[20:16:08] [INFO] testing 'Microsoft SQL Server/Sybase stacked queries (comment)'
+[20:16:08] [INFO] testing 'Microsoft SQL Server/Sybase stacked queries (DECLARE - comment)'
+[20:16:09] [INFO] testing 'Oracle stacked queries (DBMS_PIPE.RECEIVE_MESSAGE - comment)'
+[20:16:09] [INFO] testing 'MySQL >= 5.0.12 AND time-based blind (query SLEEP)'
+[20:16:10] [INFO] testing 'MySQL >= 5.0.12 AND time-based blind (SLEEP)'
+[20:16:10] [INFO] testing 'MySQL >= 5.0.12 RLIKE time-based blind'
+[20:16:11] [INFO] testing 'PostgreSQL > 8.1 AND time-based blind'
+[20:16:12] [INFO] testing 'Microsoft SQL Server/Sybase time-based blind (IF)'
+[20:16:12] [INFO] testing 'Oracle AND time-based blind'
+[20:16:13] [INFO] testing 'CUBRID AND time-based blind (SLEEP)'
+[20:16:14] [INFO] testing 'CUBRID OR time-based blind (SLEEP)'
+[20:16:14] [INFO] testing 'MySQL >= 5.0.12 time-based blind - Parameter replace'
+[20:16:14] [INFO] testing 'Generic UNION query (NULL) - 1 to 10 columns'
+[20:16:16] [INFO] testing 'MySQL UNION query (NULL) - 1 to 10 columns'
+[20:16:17] [WARNING] GET parameter 'slug' does not seem to be injectable
+[20:16:17] [CRITICAL] all tested parameters do not appear to be injectable. Try to increase values for '--level'/'--risk' options if you wish to perform more tests. If you suspect that there is some kind of protection mechanism involved (e.g. WAF) maybe you could try to use option '--tamper' (e.g. '--tamper=space2comment') and/or switch '--random-agent'
+[20:16:17] [WARNING] HTTP error codes detected during run:
+[*] ending @ 20:16:17 /2026-11-13/

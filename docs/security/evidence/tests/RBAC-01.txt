@@ -1,0 +1,22 @@
+RBAC-01  Admin pages and APIs as guest and as customer A, 2026-11-13 20:25:13
+Each line: target | role | HTTP code -> redirect | body bytes
+admin/orders.php | guest | 302 -> http://localhost:8090/admin/login.php | 0B
+admin/orders.php | A | 302 -> http://localhost:8090/admin/login.php | 0B
+admin/orders.php | ADM | 200 ->  | 30478B
+admin/security.php | guest | 302 -> http://localhost:8090/admin/login.php | 0B
+admin/security.php | A | 302 -> http://localhost:8090/admin/login.php | 0B
+admin/security.php | ADM | 200 ->  | 23723B
+admin/api/search.php?q=a | guest | 302 -> http://localhost:8090/admin/login.php | 0B
+admin/api/search.php?q=a | A | 302 -> http://localhost:8090/admin/login.php | 0B
+admin/api/search.php?q=a | ADM | 200 ->  | 29B
+admin/api/metrics.php | guest | 302 -> http://localhost:8090/admin/login.php | 0B
+admin/api/metrics.php | A | 302 -> http://localhost:8090/admin/login.php | 0B
+admin/api/metrics.php | ADM | 200 ->  | 87B
+api/admin-products.php?action=list | guest | 403 ->  | 42B
+api/admin-products.php?action=list | A | 403 ->  | 42B
+api/admin-products.php?action=list | ADM | 200 ->  | 44B
+Security events logged:
+event_type	severity	n
+login_success	info	1
+logout	info	1
+access_denied	warning	5

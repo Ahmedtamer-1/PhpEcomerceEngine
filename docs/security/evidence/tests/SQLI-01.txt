@@ -1,0 +1,22 @@
+SQLI-01  SQL injection probes, guest, 2026-11-13 20:14:42
+Seed: 3 active products (2 rings, 1 necklace) + 1 inactive necklace.
+Each line: URL | HTTP code, time, bytes | product cards on page | SQL error text found
+-- q (search). Control: 'ring' must show 2. Payloads must not show more, error or delay.
+http://localhost:8090/shop.php?q=ring | 200 0.052718s 31554B | cards=2 | sql_err=0
+http://localhost:8090/shop.php?q=ring%27 | 200 0.037721s 29616B | cards=0 | sql_err=0
+http://localhost:8090/shop.php?q=ring%25%27+OR+%271%27%3D%271%27+--+- | 200 0.053756s 29849B | cards=0 | sql_err=0
+http://localhost:8090/shop.php?q=x%25%27+AND+SLEEP(5)--+- | 200 0.046641s 29691B | cards=0 | sql_err=0
+-- category. Control: 'rings' must show 2.
+http://localhost:8090/shop.php?category=rings | 200 0.063973s 31487B | cards=2 | sql_err=0
+http://localhost:8090/shop.php?category=rings%27 | 200 0.054745s 31487B | cards=2 | sql_err=0
+http://localhost:8090/shop.php?category=1+OR+1%3D1 | 200 0.061493s 29504B | cards=0 | sql_err=0
+http://localhost:8090/shop.php?category=1+AND+SLEEP(5) | 200 0.066627s 29534B | cards=0 | sql_err=0
+-- sort (whitelist). Unknown values fall back to the default order.
+http://localhost:8090/shop.php?sort=price_asc | 200 0.051187s 32459B | cards=3 | sql_err=0
+http://localhost:8090/shop.php?sort=name+DESC%3B-- | 200 0.047208s 32459B | cards=3 | sql_err=0
+http://localhost:8090/shop.php?sort=(SELECT+SLEEP(5)) | 200 0.054285s 32459B | cards=3 | sql_err=0
+-- product.php slug. Control: an active product loads (200).
+http://localhost:8090/product.php?slug=test-ring-classic | 200 0.052787s 31580B | cards=1 | sql_err=0
+http://localhost:8090/product.php?slug=test-necklace-hidden | 404 0.043716s 23533B | cards=0 | sql_err=0
+http://localhost:8090/product.php?slug=test-necklace-hidden%27+OR+%271%27%3D%271 | 404 0.051144s 23533B | cards=0 | sql_err=0
+http://localhost:8090/product.php?slug=x%27+AND+SLEEP(5)--+- | 404 0.052847s 23533B | cards=0 | sql_err=0

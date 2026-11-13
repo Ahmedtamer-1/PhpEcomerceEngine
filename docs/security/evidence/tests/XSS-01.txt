@@ -1,0 +1,6 @@
+XSS-01  Reflected XSS, guest, 2026-11-13 20:25:11
+Payload: "><script>alert(1)</script>
+Pass when the raw <script>alert(1) never appears and the escaped form &lt;script&gt; does (or the value is dropped).
+http://localhost:8090/shop.php?q=%22%3E%3Cscript%3Ealert(1)%3C%2Fscript%3E | raw=0 escaped=0
+http://localhost:8090/track-order.php?order_number=%22%3E%3Cscript%3Ealert(1)%3C%2Fscript%3E&email=a%40b.c | raw=0 escaped=0
+http://localhost:8090/account.php?action=login&error=%22%3E%3Cscript%3Ealert(1)%3C%2Fscript%3E | raw=0 escaped=1

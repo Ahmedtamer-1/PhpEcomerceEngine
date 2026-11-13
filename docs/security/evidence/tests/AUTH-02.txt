@@ -1,0 +1,11 @@
+AUTH-02  Password policy enforced on the server (raw POST, no browser checks), guest, 2026-11-13 20:26:05
+attack   'password123' (common):        error: Choose a stronger password. Add an uppercase letter (or use a passphrase of 16+ characters). This password is too common. [HTTP 200 -> ]
+attack   'Short1' (too short):          error: Choose a stronger password. Use at least 10 characters. [HTTP 200 -> ]
+note     'alllowercase1234x' (17ch, no upper):  [HTTP 302 -> http://localhost:8090/account.php] <- allowed BY DESIGN (16+ passphrase)
+attack   'lowercase12345' (14ch, no upper): error: Choose a stronger password. Add an uppercase letter (or use a passphrase of 16+ characters). [HTTP 200 -> ]
+attack   contains the email name:       error: Choose a stronger password. Do not include your email address in the password. Do not include your name in the password. [HTTP 200 -> ]
+control  strong 'Blue-Kettle-Orbit-73':  [HTTP 302 -> http://localhost:8090/account.php]
+Accounts created:
+email
+policy3@lumeegy.test
+policy5@lumeegy.test

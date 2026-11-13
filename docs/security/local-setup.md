@@ -39,8 +39,8 @@ Listen 8090
 </VirtualHost>
 ```
 
-3. In `php.ini`, make sure `extension=fileinfo` is not commented out.
-4. Check the config with `httpd -t`, then restart Apache.
+3. In `php.ini`, make sure `extension=fileinfo` **and** `extension=gd` are not commented out. `fileinfo` is used for upload MIME detection; `gd` is used to re-encode uploaded images (without it a valid image upload throws `imagecreatefromjpeg()` *after* passing the security check).
+4. Check the config with `httpd -t`, then restart Apache (as admin: `Restart-Service Apache2.4`).
 
 ## 3. Database
 

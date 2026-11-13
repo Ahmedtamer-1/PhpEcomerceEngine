@@ -1,0 +1,19 @@
+INP-02  Product / variant / price / shipping tampering, customer A, 2026-11-13 20:25:27
+attack   add inactive product 4:               {"success":false,"message":"Product not found"} [HTTP 404]
+attack   add product 2 with variant 999:       {"success":false,"message":"That option is no longer available."} [HTTP 400]
+attack   add product 2 with no variant chosen: {"success":false,"message":"Please select a size\/color."} [HTTP 400]
+control  add product 1 x1:                     {"success":true,"count":1,"meta_event_id":"atc_7e2a442e8f114a25"} [HTTP 200]
+Cart:
+cart_id	product_id	variant_id	quantity
+2	1	NULL	1
+attack   checkout with shipping_zone=999:
+           lume-alert lume-alert--error">Invalid shipping zone selected.
+           orders for A now: 1 (seed had 1)
+attack   checkout with zone 1 (Cairo, 95) plus extra fields price=1, total=1, subtotal=1, shipping_cost=0:
+           HTTP 302 -> http://localhost:8090/checkout.php?success=1
+Stored order vs database prices:
+order_number	subtotal	shipping_cost	total	shipping_zone
+LME-C0B695-261113	450.00	95.00	545.00	Cairo
+price	sale_price
+450.00	NULL
+Pass when subtotal = product 1 price (sale price if set), shipping = 95, total = their sum.
