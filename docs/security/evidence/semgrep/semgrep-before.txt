@@ -1,0 +1,1260 @@
+                     
+                     
+┌───────────────────┐
+│ 201 Code Findings │
+└───────────────────┘
+                       
+    admin\abandoned.php
+   ❯❯❱ [1mdocs.security.lumeegy-open-redirect[0m
+          ❰❰ Blocking ❱❱
+          Request data used as a redirect target. Pass it through safe_redirect_path().
+                                                                                       
+           35┆ header('Location: ' . SITE_URL . '/admin/abandoned.php?show=' . urlencode($_GET['show'] ??
+               'open'));                                                                                 
+   
+   ❯❯❱ [1mdocs.security.lumeegy-sqli-request-to-query[0m
+          ❰❰ Blocking ❱❱
+          Request data reaches an SQL string. Use a prepared statement with ? placeholders (CLAUDE.md: never
+          interpolate request data).                                                                        
+                                                                                                            
+           46┆ $leads = db()->query("SELECT * FROM checkout_leads WHERE $where ORDER BY updated_at DESC
+               LIMIT 300")->fetchAll();                                                                
+   
+   ❯❯❱ [1mphp.lang.security.injection.tainted-sql-string.tainted-sql-string[0m
+          ❰❰ Blocking ❱❱
+          User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL
+          strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL    
+          strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate   
+          data from the database. Instead, use prepared statements (`$mysqli->prepare("INSERT INTO test(id,   
+          label) VALUES (?, ?)");`) or a safe library.                                                        
+          Details: https://sg.run/lZYG                                                                        
+                                                                                                              
+           46┆ $leads = db()->query("SELECT * FROM checkout_leads WHERE $where ORDER BY updated_at DESC
+               LIMIT 300")->fetchAll();                                                                
+                      
+    admin\activity.php
+   ❯❯❱ [1mphp.lang.security.injection.tainted-sql-string.tainted-sql-string[0m
+          ❰❰ Blocking ❱❱
+          User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL
+          strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL    
+          strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate   
+          data from the database. Instead, use prepared statements (`$mysqli->prepare("INSERT INTO test(id,   
+          label) VALUES (?, ?)");`) or a safe library.                                                        
+          Details: https://sg.run/lZYG                                                                        
+                                                                                                              
+           72┆ $sql = "SELECT a.*, u.first_name, u.last_name
+           73┆         FROM activity_log a
+           74┆         LEFT JOIN users u ON a.user_id = u.id
+           75┆         $where
+           76┆         ORDER BY a.created_at DESC
+           77┆         LIMIT $perPage OFFSET $offset";
+   
+    ❯❱ [1mphp.lang.security.injection.tainted-callable.tainted-callable[0m
+          ❰❰ Blocking ❱❱
+          Callable based on user input risks remote code execution.
+          Details: https://sg.run/YGb33                            
+                                                                   
+           80┆ $stmt = db()->prepare($sql);
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(action_icon($entry['action']));
+          123┆ <span class="activity-timeline__icon"><?= action_icon($entry['action']) ?></span>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h(ucfirst($entry['action'])));
+          128┆ <?= h(ucfirst($entry['action'])) ?>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($entry['entity_type']));
+          131┆ <span style="color:var(--a-gold)"><?= h($entry['entity_type']) ?></span>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($entry['entity_id']));
+          134┆ <span style="color:var(--a-muted)">#<?= h($entry['entity_id']) ?></span>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(time_ago($entry['created_at']));
+          137┆ <span class="activity-timeline__time"><?= time_ago($entry['created_at']) ?></span>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($entry['details']));
+          140┆ <p class="activity-timeline__details"><?= h($entry['details']) ?></p>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($userName));
+          147┆ <span class="activity-timeline__user"><?= h($userName) ?></span>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($entry['ip_address']));
+          149┆ <span class="activity-timeline__ip"><?= h($entry['ip_address']) ?></span>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($page - 1);
+          161┆ <a href="<?= SITE_URL ?>/admin/activity.php?page=<?= $page - 1 ?><?= $filterAction ?
+               '&action_type=' . urlencode($filterAction) : '' ?>">← Prev</a>                      
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($filterAction ? '&action_type=' . urlencode($filterAction) : '');
+          161┆ <a href="<?= SITE_URL ?>/admin/activity.php?page=<?= $page - 1 ?><?= $filterAction ?
+               '&action_type=' . urlencode($filterAction) : '' ?>">← Prev</a>                      
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($p);
+          170┆ <span class="current"><?= $p ?></span>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($p);
+          172┆ <a href="<?= SITE_URL ?>/admin/activity.php?page=<?= $p ?><?= $filterAction ?
+               '&action_type=' . urlencode($filterAction) : '' ?>"><?= $p ?></a>            
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($filterAction ? '&action_type=' . urlencode($filterAction) : '');
+          172┆ <a href="<?= SITE_URL ?>/admin/activity.php?page=<?= $p ?><?= $filterAction ?
+               '&action_type=' . urlencode($filterAction) : '' ?>"><?= $p ?></a>            
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($p);
+          172┆ <a href="<?= SITE_URL ?>/admin/activity.php?page=<?= $p ?><?= $filterAction ?
+               '&action_type=' . urlencode($filterAction) : '' ?>"><?= $p ?></a>            
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($page + 1);
+          177┆ <a href="<?= SITE_URL ?>/admin/activity.php?page=<?= $page + 1 ?><?= $filterAction ?
+               '&action_type=' . urlencode($filterAction) : '' ?>">Next →</a>                      
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($filterAction ? '&action_type=' . urlencode($filterAction) : '');
+          177┆ <a href="<?= SITE_URL ?>/admin/activity.php?page=<?= $page + 1 ?><?= $filterAction ?
+               '&action_type=' . urlencode($filterAction) : '' ?>">Next →</a>                      
+                       
+    admin\analytics.php
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities($segRow($r));
+          287┆ <?php foreach ($segments as $r) echo $segRow($r); ?>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($segRow($r));
+          289┆ <?php foreach ($deviceSegments as $r) echo $segRow($r); ?>
+                        
+    admin\categories.php
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(h($success));
+          117┆ <?php if ($success): ?><div class="admin-alert admin-alert--success"><?= h($success)
+               ?></div><?php endif; ?>                                                             
+                    
+    admin\demand.php
+   ❯❯❱ [1mdocs.security.lumeegy-sqli-request-to-query[0m
+          ❰❰ Blocking ❱❱
+          Request data reaches an SQL string. Use a prepared statement with ? placeholders (CLAUDE.md: never
+          interpolate request data).                                                                        
+                                                                                                            
+           52┆ $s = db()->prepare("SELECT p.id, p.name, p.slug, p.image, p.stock, p.price, p.sale_price,
+               p.is_active, c.name AS category                                                          
+           53┆                     FROM products p LEFT JOIN categories c ON c.id = p.category_id WHERE
+               p.id IN ($ph)");                                                                        
+   
+    ❯❱ [1mphp.lang.security.injection.tainted-callable.tainted-callable[0m
+          ❰❰ Blocking ❱❱
+          Callable based on user input risks remote code execution.
+          Details: https://sg.run/YGb33                            
+                                                                   
+           52┆ $s = db()->prepare("SELECT p.id, p.name, p.slug, p.image, p.stock, p.price, p.sale_price,
+               p.is_active, c.name AS category                                                          
+           53┆                     FROM products p LEFT JOIN categories c ON c.id = p.category_id WHERE
+               p.id IN ($ph)");                                                                        
+   
+   ❯❯❱ [1mphp.lang.security.injection.tainted-sql-string.tainted-sql-string[0m
+          ❰❰ Blocking ❱❱
+          User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL
+          strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL    
+          strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate   
+          data from the database. Instead, use prepared statements (`$mysqli->prepare("INSERT INTO test(id,   
+          label) VALUES (?, ?)");`) or a safe library.                                                        
+          Details: https://sg.run/lZYG                                                                        
+                                                                                                              
+           52┆ $s = db()->prepare("SELECT p.id, p.name, p.slug, p.image, p.stock, p.price, p.sale_price,
+               p.is_active, c.name AS category                                                          
+           53┆                     FROM products p LEFT JOIN categories c ON c.id = p.category_id WHERE
+               p.id IN ($ph)");                                                                        
+   
+    ❯❱ [1mphp.lang.security.injection.tainted-callable.tainted-callable[0m
+          ❰❰ Blocking ❱❱
+          Callable based on user input risks remote code execution.
+          Details: https://sg.run/YGb33                            
+                                                                   
+          101┆ uasort($rows, $sorts[$sort]);
+                              
+    admin\email-diagnostic.php
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities($testResult['msg']);
+          163┆ <?= $testResult['msg'] ?>
+   
+   ❯❯❱ [1mdocs.security.lumeegy-xss-request-echoed[0m
+          ❰❰ Blocking ❱❱
+          Request data is printed without h() / htmlspecialchars().
+                                                                   
+          163┆ <?= $testResult['msg'] ?>
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(h($_POST['test_to'] ?? ''));
+          168┆ value="<?= h($_POST['test_to'] ?? '') ?>" style="flex:1 1 260px;padding:10px 12px">
+                    
+    admin\export.php
+   ❯❯❱ [1mdocs.security.lumeegy-open-redirect[0m
+          ❰❰ Blocking ❱❱
+          Request data used as a redirect target. Pass it through safe_redirect_path().
+                                                                                       
+           33┆ header('Content-Type: text/csv; charset=utf-8');
+                      
+    admin\homepage.php
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(count($sections));
+           40┆ <?= count($sections) ?> section<?= count($sections) === 1 ? '' : 's' ?> on <strong><?=
+               h($targets[$currentPage]) ?></strong>                                                 
+   
+   ❯❯❱ [1mdocs.security.lumeegy-xss-request-echoed[0m
+          ❰❰ Blocking ❱❱
+          Request data is printed without h() / htmlspecialchars().
+                                                                   
+           40┆ <?= count($sections) ?> section<?= count($sections) === 1 ? '' : 's' ?> on <strong><?=
+               h($targets[$currentPage]) ?></strong>                                                 
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(h($targets[$currentPage]));
+           40┆ <?= count($sections) ?> section<?= count($sections) === 1 ? '' : 's' ?> on <strong><?=
+               h($targets[$currentPage]) ?></strong>                                                 
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(SITE_URL . ($previewUrls[$currentPage] ?? '/');
+           44┆ <a href="<?= SITE_URL . ($previewUrls[$currentPage] ?? '/') ?>" target="_blank"
+               class="admin-btn admin-btn--sm" style="opacity:.7">                            
+   
+   ❯❯❱ [1mdocs.security.lumeegy-xss-request-echoed[0m
+          ❰❰ Blocking ❱❱
+          Request data is printed without h() / htmlspecialchars().
+                                                                   
+           44┆ <a href="<?= SITE_URL . ($previewUrls[$currentPage] ?? '/') ?>" target="_blank"
+               class="admin-btn admin-btn--sm" style="opacity:.7">                            
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities($s['id']);
+           78┆ <div class="hp-section-card" data-id="<?= $s['id'] ?>" draggable="true">
+   
+   ❯❯❱ [1mdocs.security.lumeegy-xss-request-echoed[0m
+          ❰❰ Blocking ❱❱
+          Request data is printed without h() / htmlspecialchars().
+                                                                   
+           78┆ <div class="hp-section-card" data-id="<?= $s['id'] ?>" draggable="true">
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities($typeLabels[$s['section_type']] ?? '❓ ' . h($s['section_type']));
+           81┆ <div class="hp-section-card__type"><?= $typeLabels[$s['section_type']] ?? '❓ ' .
+               h($s['section_type']) ?></div>                                                   
+   
+   ❯❯❱ [1mdocs.security.lumeegy-xss-request-echoed[0m
+          ❰❰ Blocking ❱❱
+          Request data is printed without h() / htmlspecialchars().
+                                                                   
+           81┆ <div class="hp-section-card__type"><?= $typeLabels[$s['section_type']] ?? '❓ ' .
+               h($s['section_type']) ?></div>                                                   
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(h($s['title'] ?? 'Untitled'));
+           82┆ <div class="hp-section-card__title"><?= h($s['title'] ?? 'Untitled') ?></div>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h(mb_substr($s['subtitle'], 0, 80)));
+           84┆ <div class="hp-section-card__sub"><?= h(mb_substr($s['subtitle'], 0, 80)) ?></div>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($s['id']);
+           89┆ <input type="checkbox" <?= $s['is_active'] ? 'checked' : '' ?> onchange="toggleSection(<?=
+               $s['id'] ?>, this)">                                                                      
+   
+   ❯❯❱ [1mdocs.security.lumeegy-xss-request-echoed[0m
+          ❰❰ Blocking ❱❱
+          Request data is printed without h() / htmlspecialchars().
+                                                                   
+           89┆ <input type="checkbox" <?= $s['is_active'] ? 'checked' : '' ?> onchange="toggleSection(<?=
+               $s['id'] ?>, this)">                                                                      
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities($s['id']);
+           92┆ <button class="admin-btn admin-btn--sm" onclick="editSection(<?= $s['id']
+               ?>)">Edit</button>                                                       
+   
+   ❯❯❱ [1mdocs.security.lumeegy-xss-request-echoed[0m
+          ❰❰ Blocking ❱❱
+          Request data is printed without h() / htmlspecialchars().
+                                                                   
+           92┆ <button class="admin-btn admin-btn--sm" onclick="editSection(<?= $s['id']
+               ?>)">Edit</button>                                                       
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities($s['id']);
+           93┆ <button class="admin-btn admin-btn--sm admin-btn--danger" onclick="deleteSection(<?=
+               $s['id'] ?>)">✕</button>                                                            
+   
+   ❯❯❱ [1mdocs.security.lumeegy-xss-request-echoed[0m
+          ❰❰ Blocking ❱❱
+          Request data is printed without h() / htmlspecialchars().
+                                                                   
+           93┆ <button class="admin-btn admin-btn--sm admin-btn--danger" onclick="deleteSection(<?=
+               $s['id'] ?>)">✕</button>                                                            
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(json_encode($currentPage));
+          249┆ const CURRENT_PAGE = <?= json_encode($currentPage) ?>;
+                      
+    admin\messages.php
+   ❯❯❱ [1mdocs.security.lumeegy-open-redirect[0m
+          ❰❰ Blocking ❱❱
+          Request data used as a redirect target. Pass it through safe_redirect_path().
+                                                                                       
+           18┆ header('Location: ' . SITE_URL . '/admin/messages.php?id=' . $mid . '&msg=marked_' .
+               $label);                                                                            
+   
+   ❯❯❱ [1mdocs.security.lumeegy-sqli-request-to-query[0m
+          ❰❰ Blocking ❱❱
+          Request data reaches an SQL string. Use a prepared statement with ? placeholders (CLAUDE.md: never
+          interpolate request data).                                                                        
+                                                                                                            
+           38┆ db()->prepare("DELETE FROM contact_messages WHERE id IN
+               ($placeholders)")->execute($cleanIds);                 
+   
+    ❯❱ [1mphp.lang.security.injection.tainted-callable.tainted-callable[0m
+          ❰❰ Blocking ❱❱
+          Callable based on user input risks remote code execution.
+          Details: https://sg.run/YGb33                            
+                                                                   
+           38┆ db()->prepare("DELETE FROM contact_messages WHERE id IN
+               ($placeholders)")->execute($cleanIds);                 
+   
+   ❯❯❱ [1mphp.lang.security.injection.tainted-sql-string.tainted-sql-string[0m
+          ❰❰ Blocking ❱❱
+          User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL
+          strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL    
+          strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate   
+          data from the database. Instead, use prepared statements (`$mysqli->prepare("INSERT INTO test(id,   
+          label) VALUES (?, ?)");`) or a safe library.                                                        
+          Details: https://sg.run/lZYG                                                                        
+                                                                                                              
+           38┆ db()->prepare("DELETE FROM contact_messages WHERE id IN
+               ($placeholders)")->execute($cleanIds);                 
+   
+   ❯❯❱ [1mdocs.security.lumeegy-sqli-request-to-query[0m
+          ❰❰ Blocking ❱❱
+          Request data reaches an SQL string. Use a prepared statement with ? placeholders (CLAUDE.md: never
+          interpolate request data).                                                                        
+                                                                                                            
+           42┆ db()->prepare("UPDATE contact_messages SET is_read = 1 WHERE id IN
+               ($placeholders)")->execute($cleanIds);                            
+   
+    ❯❱ [1mphp.lang.security.injection.tainted-callable.tainted-callable[0m
+          ❰❰ Blocking ❱❱
+          Callable based on user input risks remote code execution.
+          Details: https://sg.run/YGb33                            
+                                                                   
+           42┆ db()->prepare("UPDATE contact_messages SET is_read = 1 WHERE id IN
+               ($placeholders)")->execute($cleanIds);                            
+   
+   ❯❯❱ [1mphp.lang.security.injection.tainted-sql-string.tainted-sql-string[0m
+          ❰❰ Blocking ❱❱
+          User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL
+          strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL    
+          strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate   
+          data from the database. Instead, use prepared statements (`$mysqli->prepare("INSERT INTO test(id,   
+          label) VALUES (?, ?)");`) or a safe library.                                                        
+          Details: https://sg.run/lZYG                                                                        
+                                                                                                              
+           42┆ db()->prepare("UPDATE contact_messages SET is_read = 1 WHERE id IN
+               ($placeholders)")->execute($cleanIds);                            
+   
+   ❯❯❱ [1mdocs.security.lumeegy-sqli-request-to-query[0m
+          ❰❰ Blocking ❱❱
+          Request data reaches an SQL string. Use a prepared statement with ? placeholders (CLAUDE.md: never
+          interpolate request data).                                                                        
+                                                                                                            
+           46┆ db()->prepare("UPDATE contact_messages SET is_read = 0 WHERE id IN
+               ($placeholders)")->execute($cleanIds);                            
+   
+    ❯❱ [1mphp.lang.security.injection.tainted-callable.tainted-callable[0m
+          ❰❰ Blocking ❱❱
+          Callable based on user input risks remote code execution.
+          Details: https://sg.run/YGb33                            
+                                                                   
+           46┆ db()->prepare("UPDATE contact_messages SET is_read = 0 WHERE id IN
+               ($placeholders)")->execute($cleanIds);                            
+   
+   ❯❯❱ [1mphp.lang.security.injection.tainted-sql-string.tainted-sql-string[0m
+          ❰❰ Blocking ❱❱
+          User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL
+          strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL    
+          strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate   
+          data from the database. Instead, use prepared statements (`$mysqli->prepare("INSERT INTO test(id,   
+          label) VALUES (?, ?)");`) or a safe library.                                                        
+          Details: https://sg.run/lZYG                                                                        
+                                                                                                              
+           46┆ db()->prepare("UPDATE contact_messages SET is_read = 0 WHERE id IN
+               ($placeholders)")->execute($cleanIds);                            
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(h($success));
+           86┆ <?php if ($success): ?><div class="admin-alert admin-alert--success"><?= h($success)
+               ?></div><?php endif; ?>                                                             
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($success));
+          183┆ <?php if ($success): ?><div class="admin-alert admin-alert--success"><?= h($success)
+               ?></div><?php endif; ?>                                                             
+                       
+    admin\order-new.php
+    ❯❱ [1mdocs.security.lumeegy-direct-order-status-update[0m
+          ❰❰ Blocking ❱❱
+          Direct UPDATE of orders.status. Use set_order_status() / cancel_order() so stock stays consistent
+          (CLAUDE.md). Expected only inside includes/functions.php.                                        
+                                                                                                           
+           86┆ db()->prepare('UPDATE orders SET status = ? WHERE id = ?')->execute([$status, $orderId]);
+   
+   ❯❯❱ [1mdocs.security.lumeegy-open-redirect[0m
+          ❰❰ Blocking ❱❱
+          Request data used as a redirect target. Pass it through safe_redirect_path().
+                                                                                       
+           92┆ header('Location: ' . SITE_URL . '/admin/orders.php?id=' . $orderId . '&msg=created');
+                    
+    admin\orders.php
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(h($success));
+          119┆ <?php if ($success): ?><div class="admin-alert admin-alert--success"><?= h($success)
+               ?></div><?php endif; ?>                                                             
+   
+   ❯❯❱ [1mdocs.security.lumeegy-sqli-request-to-query[0m
+          ❰❰ Blocking ❱❱
+          Request data reaches an SQL string. Use a prepared statement with ? placeholders (CLAUDE.md: never
+          interpolate request data).                                                                        
+                                                                                                            
+          295┆ $stmt = db()->prepare($query);
+   
+    ❯❱ [1mphp.lang.security.injection.tainted-callable.tainted-callable[0m
+          ❰❰ Blocking ❱❱
+          Callable based on user input risks remote code execution.
+          Details: https://sg.run/YGb33                            
+                                                                   
+          295┆ $stmt = db()->prepare($query);
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(h($success));
+          301┆ <?php if ($success): ?><div class="admin-alert admin-alert--success"><?= h($success)
+               ?></div><?php endif; ?>                                                             
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(count($orders));
+          305┆ <span style="font-size:.85rem;color:var(--text-muted)"><?= count($orders) ?> orders</span>
+   
+   ❯❯❱ [1mdocs.security.lumeegy-xss-request-echoed[0m
+          ❰❰ Blocking ❱❱
+          Request data is printed without h() / htmlspecialchars().
+                                                                   
+          305┆ <span style="font-size:.85rem;color:var(--text-muted)"><?= count($orders) ?> orders</span>
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(urlencode($search));
+          307┆ <a href="?status_filter=&search=<?= urlencode($search) ?>" class="admin-filter-tab <?=
+               empty($filterStatus) ? 'active' : '' ?>">All</a>                                      
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(urlencode($search));
+          310┆ <a href="?status_filter=<?= $gk ?>&search=<?= urlencode($search) ?>" class="admin-filter-
+               tab <?= $filterStatus === $gk ? 'active' : '' ?>"><?= $gl ?><?php if ($gc): ?> <span     
+               class="admin-filter-tab__count"><?= $gc ?></span><?php endif; ?></a>                     
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(urlencode($search));
+          313┆ <a href="?status_filter=<?= $st ?>&search=<?= urlencode($search) ?>" class="admin-filter-
+               tab <?= $filterStatus === $st ? 'active' : '' ?>"><?= ucwords(str_replace('_', ' ', $st))
+               ?><?php if (!empty($statusCounts[$st])): ?> <span class="admin-filter-tab__count"><?=    
+               (int)$statusCounts[$st] ?></span><?php endif; ?></a>                                     
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($filterStatus));
+          319┆ <input type="hidden" name="status_filter" value="<?= h($filterStatus) ?>">
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($search));
+          320┆ <input type="text" name="search" value="<?= h($search) ?>" placeholder="Search orders…"
+               class="admin-search-input">                                                            
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($o['id']);
+          355┆ <td><input type="checkbox" name="bulk_ids[]" value="<?= $o['id'] ?>" class="row-checkbox"
+               onclick="updateBulkActionBar()"></td>                                                    
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($o['id']);
+          356┆ <td><a href="<?= SITE_URL ?>/admin/orders.php?id=<?= $o['id'] ?>"                 
+               style="color:var(--accent)"><strong><?= h($o['order_number']) ?></strong></a></td>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($o['order_number']));
+          356┆ <td><a href="<?= SITE_URL ?>/admin/orders.php?id=<?= $o['id'] ?>"                 
+               style="color:var(--accent)"><strong><?= h($o['order_number']) ?></strong></a></td>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($o['shipping_name'] ?? $o['guest_email'] ?? '—'));
+          357┆ <td><?= h($o['shipping_name'] ?? $o['guest_email'] ?? '—') ?></td>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($o['status']));
+          359┆ <select class="admin-badge admin-badge--<?= h($o['status']) ?>"
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($o['id']);
+          361┆ onchange="quickUpdateStatus(this, <?= $o['id'] ?>)">
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(money((float)$o['total']));
+          367┆ <td><?= money((float)$o['total']) ?></td>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($o['payment_method'] ?? '—'));
+          368┆ <td style="color:var(--text-muted);font-size:.8rem"><?= h($o['payment_method'] ?? '—')
+               ?></td>                                                                               
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(date('d M Y', strtotime($o['created_at'])));
+          369┆ <td style="color:var(--text-muted)"><?= date('d M Y', strtotime($o['created_at'])) ?></td>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($o['id']);
+          371┆ <a href="<?= SITE_URL ?>/admin/orders.php?id=<?= $o['id'] ?>" class="admin-btn admin-btn--
+               sm">View</a>                                                                              
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($o['id']);
+          372┆ <a href="<?= SITE_URL ?>/admin/orders.php?action=delete&id=<?= $o['id'] ?>" class="admin-
+               btn admin-btn--sm admin-btn--danger"                                                     
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($o['order_number']));
+          373┆ onclick="return confirm('Delete order <?= h($o['order_number']) ?>? This cannot be
+               undone.')">Delete</a>                                                             
+                   
+    admin\pages.php
+    ❯❱ [1mdocs.security.lumeegy-exception-message-to-user[0m
+          ❰❰ Blocking ❱❱
+          Exception message is sent to the user. Log it and show a generic message with a reference ID
+          instead.                                                                                    
+                                                                                                      
+           35┆ $error = 'Error saving content: ' . $e->getMessage();
+                      
+    admin\settings.php
+    ❯❱ [1mdocs.security.lumeegy-exception-message-to-user[0m
+          ❰❰ Blocking ❱❱
+          Exception message is sent to the user. Log it and show a generic message with a reference ID
+          instead.                                                                                    
+                                                                                                      
+           96┆ $error = 'Error saving settings: ' . $e->getMessage();
+                      
+    admin\shipping.php
+    ❯❱ [1mdocs.security.lumeegy-exception-message-to-user[0m
+          ❰❰ Blocking ❱❱
+          Exception message is sent to the user. Log it and show a generic message with a reference ID
+          instead.                                                                                    
+                                                                                                      
+           28┆ $error = "Error adding zone (maybe duplicate name?): " . $e->getMessage();
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(h($success));
+           57┆ <?php if ($success): ?><div class="admin-alert admin-alert--success"><?= h($success)
+               ?></div><?php endif; ?>                                                             
+                         
+    admin\subscribers.php
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(h($success));
+           98┆ <?php if ($success): ?><div class="admin-alert admin-alert--success"><?= h($success)
+               ?></div><?php endif; ?>                                                             
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($filter));
+          109┆ <input type="hidden" name="filter" value="<?= h($filter) ?>">
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($search));
+          111┆ <input type="text" name="q" value="<?= h($search) ?>" placeholder="Search by email…"
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($filter));
+          115┆ <a href="<?= SITE_URL ?>/admin/subscribers.php?export=csv&filter=<?= h($filter) ?>"
+               class="admin-btn admin-btn--sm admin-btn--primary">                                
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($search ? '?q=' . urlencode($search) : '');
+          123┆ <a href="<?= SITE_URL ?>/admin/subscribers.php<?= $search ? '?q=' . urlencode($search) : ''
+               ?>"                                                                                        
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($search ? '&q=' . urlencode($search) : '');
+          125┆ <a href="<?= SITE_URL ?>/admin/subscribers.php?filter=active<?= $search ? '&q=' .
+               urlencode($search) : '' ?>"                                                      
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($search ? '&q=' . urlencode($search) : '');
+          127┆ <a href="<?= SITE_URL ?>/admin/subscribers.php?filter=unsubscribed<?= $search ? '&q=' .
+               urlencode($search) : '' ?>"                                                            
+                    
+    admin\themes.php
+    ❯❱ [1mdocs.security.lumeegy-exception-message-to-user[0m
+          ❰❰ Blocking ❱❱
+          Exception message is sent to the user. Log it and show a generic message with a reference ID
+          instead.                                                                                    
+                                                                                                      
+           19┆ die("Database error during migration: " . $e->getMessage());
+            ⋮┆----------------------------------------
+           74┆ $error = "Error: " . $e->getMessage();
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(h($success));
+           97┆ <div class="admin-alert admin-alert--success"><?= h($success) ?></div>
+                   
+    admin\users.php
+   ❯❯❱ [1mdocs.security.lumeegy-sqli-request-to-query[0m
+          ❰❰ Blocking ❱❱
+          Request data reaches an SQL string. Use a prepared statement with ? placeholders (CLAUDE.md: never
+          interpolate request data).                                                                        
+                                                                                                            
+           39┆ db()->prepare("DELETE FROM users WHERE id IN        
+               ($placeholders)")->execute(array_values($cleanIds));
+   
+    ❯❱ [1mphp.lang.security.injection.tainted-callable.tainted-callable[0m
+          ❰❰ Blocking ❱❱
+          Callable based on user input risks remote code execution.
+          Details: https://sg.run/YGb33                            
+                                                                   
+           39┆ db()->prepare("DELETE FROM users WHERE id IN        
+               ($placeholders)")->execute(array_values($cleanIds));
+   
+   ❯❯❱ [1mphp.lang.security.injection.tainted-sql-string.tainted-sql-string[0m
+          ❰❰ Blocking ❱❱
+          User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL
+          strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL    
+          strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate   
+          data from the database. Instead, use prepared statements (`$mysqli->prepare("INSERT INTO test(id,   
+          label) VALUES (?, ?)");`) or a safe library.                                                        
+          Details: https://sg.run/lZYG                                                                        
+                                                                                                              
+           39┆ db()->prepare("DELETE FROM users WHERE id IN        
+               ($placeholders)")->execute(array_values($cleanIds));
+   
+    ❯❱ [1mdocs.security.lumeegy-sql-built-by-concatenation[0m
+          ❰❰ Blocking ❱❱
+          SQL text is built by concatenation. Safe only if every joined piece is a constant or comes from a
+          whitelist (e.g. ORDER BY). Check and document.                                                   
+                                                                                                           
+          176┆ $stmt = db()->prepare(
+          177┆     'SELECT u.*, (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) AS order_count,
+          178┆      (SELECT COALESCE(SUM(o.total),0) FROM orders o WHERE o.user_id = u.id AND o.status NOT
+               IN ("cancelled","refunded")) AS total_spent                                                
+          179┆      FROM users u WHERE 1=1' . $whereStr . ' ORDER BY u.created_at DESC'
+          180┆ );
+                      
+    admin\variants.php
+   ❯❯❱ [1mdocs.security.lumeegy-open-redirect[0m
+          ❰❰ Blocking ❱❱
+          Request data used as a redirect target. Pass it through safe_redirect_path().
+                                                                                       
+           38┆ header('Location: ' . SITE_URL . '/admin/variants.php?product_id=' . $productId .
+               '&msg=deleted');                                                                 
+   
+    ❯❱ [1mdocs.security.lumeegy-exception-message-to-user[0m
+          ❰❰ Blocking ❱❱
+          Exception message is sent to the user. Log it and show a generic message with a reference ID
+          instead.                                                                                    
+                                                                                                      
+          102┆ $error = 'Database error: ' . $e->getMessage();
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities($productId);
+          136┆ <a href="<?= SITE_URL ?>/admin/products.php?action=edit&id=<?= $productId ?>" class="admin-
+               btn admin-btn--sm" style="opacity:.7">                                                     
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($success));
+          141┆ <?php if ($success): ?><div class="admin-alert admin-alert--success"><?= h($success)
+               ?></div><?php endif; ?>                                                             
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($productId);
+          196┆ <a href="<?= SITE_URL ?>/admin/variants.php?product_id=<?= $productId ?>&action=edit&id=<?=
+               $v['id'] ?>" class="admin-btn admin-btn--sm">Edit</a>                                      
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($productId);
+          197┆ <a href="<?= SITE_URL ?>/admin/variants.php?product_id=<?= $productId                 
+               ?>&action=delete&id=<?= $v['id'] ?>" class="admin-btn admin-btn--sm admin-btn--danger"
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($productId);
+          287┆ <a href="<?= SITE_URL ?>/admin/variants.php?product_id=<?= $productId ?>" class="admin-
+               btn">Cancel</a>                                                                        
+                    
+    admin\visits.php
+   ❯❯❱ [1mphp.lang.security.injection.tainted-sql-string.tainted-sql-string[0m
+          ❰❰ Blocking ❱❱
+          User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL
+          strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL    
+          strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate   
+          data from the database. Instead, use prepared statements (`$mysqli->prepare("INSERT INTO test(id,   
+          label) VALUES (?, ?)");`) or a safe library.                                                        
+          Details: https://sg.run/lZYG                                                                        
+                                                                                                              
+           83┆ foreach ($all('SELECT session_id, created_at, page_type, path, product_id, duration_s FROM
+               page_views                                                                                
+           84┆                WHERE session_id IN (' . $ph($sids) . ') ORDER BY id', $sids) as $pv) {
+            ⋮┆----------------------------------------
+           89┆ foreach ($all('SELECT visitor_id, session_id, MIN(created_at) st, MAX(user_id) uid FROM
+               page_views                                                                             
+           90┆                WHERE visitor_id IN (' . $ph($vids) . ') GROUP BY visitor_id, session_id
+               ORDER BY st', $vids) as $r) {                                                          
+            ⋮┆----------------------------------------
+          101┆ $ev = $all("SELECT ce.event, ce.product_id, ce.quantity, ce.unit_price, ce.visitor_id,
+               ce.order_id, ce.created_at, p.name                                                    
+          102┆             FROM cart_events ce LEFT JOIN products p ON p.id = ce.product_id
+          103┆             WHERE ce.visitor_id IN (" . $ph($vids) . ") AND ce.created_at BETWEEN ? AND
+               DATE_ADD(?, INTERVAL 30 MINUTE)                                                        
+            ⋮┆----------------------------------------
+          117┆ foreach ($all('SELECT id, first_name, last_name, email FROM users WHERE id IN (' .
+               $ph($uids) . ')', $uids) as $u) $users[(int)$u['id']] = $u;                       
+            ⋮┆----------------------------------------
+          121┆ foreach ($all('SELECT id, order_number, total, status FROM orders WHERE id IN (' .
+               $ph($oids) . ')', $oids) as $o) $orders[(int)$o['id']] = $o;                      
+                          
+    api\admin-products.php
+    ❯❱ [1mdocs.security.lumeegy-exception-message-to-user[0m
+          ❰❰ Blocking ❱❱
+          Exception message is sent to the user. Log it and show a generic message with a reference ID
+          instead.                                                                                    
+                                                                                                      
+          170┆ $msg = str_contains($e->getMessage(), 'Duplicate') ? 'A product with this slug already
+               exists.' : 'Database error.';                                                         
+            ⋮┆----------------------------------------
+          273┆ $msg = str_contains($e->getMessage(), 'Duplicate') ? 'This size/color combination already
+               exists.' : 'Database error.';                                                            
+   
+   ❯❯❱ [1mphp.lang.security.injection.tainted-sql-string.tainted-sql-string[0m
+          ❰❰ Blocking ❱❱
+          User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL
+          strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL    
+          strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate   
+          data from the database. Instead, use prepared statements (`$mysqli->prepare("INSERT INTO test(id,   
+          label) VALUES (?, ?)");`) or a safe library.                                                        
+          Details: https://sg.run/lZYG                                                                        
+                                                                                                              
+          308┆ echo json_encode(['success' => false, 'message' => "That would create $total variants.
+               Narrow it down to 200 or fewer."]);                                                   
+   
+    ❯❱ [1mdocs.security.lumeegy-sql-built-by-concatenation[0m
+          ❰❰ Blocking ❱❱
+          SQL text is built by concatenation. Safe only if every joined piece is a constant or comes from a
+          whitelist (e.g. ORDER BY). Check and document.                                                   
+                                                                                                           
+          312┆ $baseSku = (string)(db()->query('SELECT sku FROM products WHERE id = ' .
+               $productId)->fetchColumn() ?: '');                                      
+   
+   ❯❯❱ [1mphp.lang.security.injection.tainted-sql-string.tainted-sql-string[0m
+          ❰❰ Blocking ❱❱
+          User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL
+          strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL    
+          strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate   
+          data from the database. Instead, use prepared statements (`$mysqli->prepare("INSERT INTO test(id,   
+          label) VALUES (?, ?)");`) or a safe library.                                                        
+          Details: https://sg.run/lZYG                                                                        
+                                                                                                              
+          312┆ $baseSku = (string)(db()->query('SELECT sku FROM products WHERE id = ' .
+               $productId)->fetchColumn() ?: '');                                      
+   
+    ❯❱ [1mdocs.security.lumeegy-exception-message-to-user[0m
+          ❰❰ Blocking ❱❱
+          Exception message is sent to the user. Log it and show a generic message with a reference ID
+          instead.                                                                                    
+                                                                                                      
+          349┆ echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+            ⋮┆----------------------------------------
+          349┆ echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+            ⋮┆----------------------------------------
+          425┆ echo json_encode(['success' => false, 'message' => 'DB error: ' . $e->getMessage()]);
+            ⋮┆----------------------------------------
+          425┆ echo json_encode(['success' => false, 'message' => 'DB error: ' . $e->getMessage()]);
+   
+    ❯❱ [1mdocs.security.lumeegy-sql-built-by-concatenation[0m
+          ❰❰ Blocking ❱❱
+          SQL text is built by concatenation. Safe only if every joined piece is a constant or comes from a
+          whitelist (e.g. ORDER BY). Check and document.                                                   
+                                                                                                           
+          621┆ $pdo->prepare('INSERT INTO products (`' . implode('`,`', $cols) . '`) VALUES (' .
+               implode(',', array_fill(0, count($cols), '?')) . ')')                            
+            ⋮┆----------------------------------------
+          632┆ $pdo->prepare('INSERT INTO product_variants (`' . implode('`,`', $vc) . '`) VALUES (' .
+               implode(',', array_fill(0, count($vc), '?')) . ')')                                    
+                 
+    api\media.php
+    ❯❱ [1mphp.lang.security.injection.tainted-callable.tainted-callable[0m
+          ❰❰ Blocking ❱❱
+          Callable based on user input risks remote code execution.
+          Details: https://sg.run/YGb33                            
+                                                                   
+           53┆ $stmt = db()->prepare("SELECT * FROM media_library $w ORDER BY created_at DESC, id DESC
+               LIMIT $limit OFFSET $offset");                                                         
+   
+   ❯❯❱ [1mphp.lang.security.injection.tainted-sql-string.tainted-sql-string[0m
+          ❰❰ Blocking ❱❱
+          User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL
+          strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL    
+          strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate   
+          data from the database. Instead, use prepared statements (`$mysqli->prepare("INSERT INTO test(id,   
+          label) VALUES (?, ?)");`) or a safe library.                                                        
+          Details: https://sg.run/lZYG                                                                        
+                                                                                                              
+           53┆ $stmt = db()->prepare("SELECT * FROM media_library $w ORDER BY created_at DESC, id DESC
+               LIMIT $limit OFFSET $offset");                                                         
+                           
+    api\paymob_callback.php
+    ❯❱ [1mdocs.security.lumeegy-post-handler-without-csrf[0m
+          ❰❰ Blocking ❱❱
+          File handles POST but never calls csrf_verify(). Fine only for machine endpoints (payment webhook,
+          analytics beacons); otherwise add the check.                                                      
+                                                                                                            
+            1┆ <?php
+              
+    api\pv.php
+    ❯❱ [1mdocs.security.lumeegy-post-handler-without-csrf[0m
+          ❰❰ Blocking ❱❱
+          File handles POST but never calls csrf_verify(). Fine only for machine endpoints (payment webhook,
+          analytics beacons); otherwise add the check.                                                      
+                                                                                                            
+            1┆ <?php
+                           
+    api\section-preview.php
+    ❯❱ [1mdocs.security.lumeegy-exception-message-to-user[0m
+          ❰❰ Blocking ❱❱
+          Exception message is sent to the user. Log it and show a generic message with a reference ID
+          instead.                                                                                    
+                                                                                                      
+           90┆ $html = '<pre style="padding:24px;color:#f66;background:#200;font:12px monospace;white-
+               space:pre-wrap">'                                                                      
+           91┆       . h('Preview error: ' . $e->getMessage()) . '</pre>';
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities($row ? preview_render($row, (int)($draft['i'] ?? 0), true) : '');
+          110┆ echo $row ? preview_render($row, (int)($draft['i'] ?? 0), true) : '';
+   
+   ❯❯❱ [1mdocs.security.lumeegy-xss-request-echoed[0m
+          ❰❰ Blocking ❱❱
+          Request data is printed without h() / htmlspecialchars().
+                                                                   
+          110┆ echo $row ? preview_render($row, (int)($draft['i'] ?? 0), true) : '';
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(preview_render($row, $i, false));
+          126┆ foreach ($rows as $i => $row) echo preview_render($row, $i, false);
+   
+   ❯❯❱ [1mdocs.security.lumeegy-xss-request-echoed[0m
+          ❰❰ Blocking ❱❱
+          Request data is printed without h() / htmlspecialchars().
+                                                                   
+          126┆ foreach ($rows as $i => $row) echo preview_render($row, $i, false);
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(h($targets[$pk] ?? 'page'));
+          129┆ <span>Previewing <strong><?= h($targets[$pk] ?? 'page') ?></strong> with unsaved changes.
+               Links open the live site.</span>                                                         
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(preview_render($row, $i, $isBuilder));
+          226┆ foreach ($rows as $i => $row) echo preview_render($row, $i, $isBuilder);
+   
+   ❯❯❱ [1mdocs.security.lumeegy-xss-request-echoed[0m
+          ❰❰ Blocking ❱❱
+          Request data is printed without h() / htmlspecialchars().
+                                                                   
+          226┆ foreach ($rows as $i => $row) echo preview_render($row, $i, $isBuilder);
+                 
+    api\track.php
+    ❯❱ [1mdocs.security.lumeegy-post-handler-without-csrf[0m
+          ❰❰ Blocking ❱❱
+          File handles POST but never calls csrf_verify(). Fine only for machine endpoints (payment webhook,
+          analytics beacons); otherwise add the check.                                                      
+                                                                                                            
+            1┆ <?php
+                
+    checkout.php
+   ❯❯❱ [1mdocs.security.lumeegy-open-redirect[0m
+          ❰❰ Blocking ❱❱
+          Request data used as a redirect target. Pass it through safe_redirect_path().
+                                                                                       
+          251┆ redirect($iframeUrl);
+   
+    ❯❱ [1mdocs.security.lumeegy-direct-order-status-update[0m
+          ❰❰ Blocking ❱❱
+          Direct UPDATE of orders.status. Use set_order_status() / cancel_order() so stock stays consistent
+          (CLAUDE.md). Expected only inside includes/functions.php.                                        
+                                                                                                           
+          260┆ db()->prepare("UPDATE orders SET status = 'pending_payment' WHERE id =
+               ?")->execute([$orderId]);                                             
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(h($_POST['shipping_name'] ?? ($user ? $user['first_name'].'
+              '.$user['last_name'] : '')));                                                           
+          432┆ <input class="lume-form__input" type="text" id="shipping_name" name="shipping_name"        
+               value="<?= h($_POST['shipping_name'] ?? ($user ? $user['first_name'].' '.$user['last_name']
+               : '')) ?>" required>                                                                       
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($_POST['email'] ?? ($user['email'] ?? '')));
+          438┆ <input class="lume-form__input" type="email" id="email" name="email" value="<?=
+               h($_POST['email'] ?? ($user['email'] ?? '')) ?>" required>                     
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($_POST['phone'] ?? ''));
+          442┆ <input class="lume-form__input" type="tel" id="phone" name="phone" value="<?=
+               h($_POST['phone'] ?? '') ?>" required>                                       
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($_POST['address'] ?? ''));
+          448┆ <input class="lume-form__input" type="text" id="address" name="address" value="<?=
+               h($_POST['address'] ?? '') ?>" required>                                          
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($_POST['notes'] ?? ''));
+          470┆ <textarea class="lume-form__textarea" id="notes" name="notes" rows="3"><?=
+               h($_POST['notes'] ?? '') ?></textarea>                                    
+                       
+    config\database.php
+    ❯❱ [1mdocs.security.lumeegy-sql-built-by-concatenation[0m
+          ❰❰ Blocking ❱❱
+          SQL text is built by concatenation. Safe only if every joined piece is a constant or comes from a
+          whitelist (e.g. ORDER BY). Check and document.                                                   
+                                                                                                           
+           29┆ $pdo->exec("SET time_zone = '" . date('P') . "'");
+   
+    ❯❱ [1mdocs.security.lumeegy-exception-message-to-user[0m
+          ❰❰ Blocking ❱❱
+          Exception message is sent to the user. Log it and show a generic message with a reference ID
+          instead.                                                                                    
+                                                                                                      
+           32┆ die('<pre style="color:red">DB Error: ' . $e->getMessage() . '</pre>');
+                          
+    includes\analytics.php
+    ❯❱ [1mdocs.security.lumeegy-sql-built-by-concatenation[0m
+          ❰❰ Blocking ❱❱
+          SQL text is built by concatenation. Safe only if every joined piece is a constant or comes from a
+          whitelist (e.g. ORDER BY). Check and document.                                                   
+                                                                                                           
+          449┆ $s = db()->prepare('SELECT visit_date, visitors FROM daily_visitors WHERE visit_date
+               BETWEEN ? AND ?' . ($first ? ' AND visit_date < ?' : ''));                          
+            ⋮┆----------------------------------------
+          470┆ $s = db()->prepare('SELECT COALESCE(SUM(visitors),0) FROM daily_visitors WHERE visit_date
+               BETWEEN ? AND ?' . ($first ? ' AND visit_date < ?' : ''));                               
+            ⋮┆----------------------------------------
+          491┆ $s = db()->prepare('SELECT id, name FROM products WHERE id IN (' . implode(',',
+               array_fill(0, count($ids), '?')) . ')');                                       
+                          
+    includes\functions.php
+    ❯❱ [1mdocs.security.lumeegy-direct-order-status-update[0m
+          ❰❰ Blocking ❱❱
+          Direct UPDATE of orders.status. Use set_order_status() / cancel_order() so stock stays consistent
+          (CLAUDE.md). Expected only inside includes/functions.php.                                        
+                                                                                                           
+          1029┆ * The admin previously ran a bare `UPDATE orders SET status = ?` from both
+            ⋮┆----------------------------------------
+          1058┆ $pdo->prepare('UPDATE orders SET status = ?, updated_at = NOW() WHERE id = ?')
+            ⋮┆----------------------------------------
+          1127┆ 'UPDATE orders SET status = "cancelled", updated_at = NOW() WHERE id = ?'
+               
+    product.php
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(h($product['category_slug']));
+          142┆ / <a href="<?= SITE_URL ?>/shop.php?category=<?= h($product['category_slug']) ?>"><?=
+               h($product['category_name']) ?></a>                                                  
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($product['category_name']));
+          142┆ / <a href="<?= SITE_URL ?>/shop.php?category=<?= h($product['category_slug']) ?>"><?=
+               h($product['category_name']) ?></a>                                                  
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($product['name']));
+          144┆ / <?= h($product['name']) ?>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h(thumb_url($activeImages[0], 1000)));
+          161┆ src="<?= h(thumb_url($activeImages[0], 1000)) ?>" fetchpriority="high"
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($product['name']));
+          162┆ alt="<?= h($product['name']) ?>">
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($idx);
+          175┆ data-index="<?= $idx ?>"
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($idx + 1);
+          176┆ aria-label="View image <?= $idx + 1 ?>">
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h(thumb_url($img, 200)));
+          177┆ <img src="<?= h(thumb_url($img, 200)) ?>" alt="" loading="lazy">
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($product['category_name']));
+          188┆ <p class="lume-product-single__cat"><?= h($product['category_name']) ?></p>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($product['name']));
+          191┆ <h1><?= h($product['name']) ?></h1>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(product_price($product));
+          194┆ <?= product_price($product) ?>
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($firstColor ? h($firstColor) : 'Select a color');
+          205┆ <label class="lume-variant-section__label">Color: <span id="selected-color-label"><?=
+               $firstColor ? h($firstColor) : 'Select a color' ?></span></label>                    
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($name));
+          209┆ data-color="<?= h($name) ?>"
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($hex));
+          210┆ data-hex="<?= h($hex) ?>"
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($colorImages[$name] ?? ''));
+          211┆ data-image="<?= h($colorImages[$name] ?? '') ?>"
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($name));
+          212┆ aria-label="<?= h($name) ?>" title="<?= h($name) ?>">
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($name));
+          212┆ aria-label="<?= h($name) ?>" title="<?= h($name) ?>">
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(!empty($colorImages[$name]) ? 'background-
+              image:url('.h(thumb_url($colorImages[$name], 100)).');background-      
+              size:cover;background-position:center' : 'background:'.h($hex));       
+          213┆ <span class="lume-color-swatch__inner" style="<?= !empty($colorImages[$name]) ?
+               'background-image:url('.h(thumb_url($colorImages[$name], 100)).');background-  
+               size:cover;background-position:center' : 'background:'.h($hex) ?>"></span>     
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($name));
+          214┆ <span class="lume-color-swatch__tooltip"><?= h($name) ?></span>
+            
+    shop.php
+   ❯❯❱ [1mphp.lang.security.injection.tainted-sql-string.tainted-sql-string[0m
+          ❰❰ Blocking ❱❱
+          User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL
+          strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL    
+          strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate   
+          data from the database. Instead, use prepared statements (`$mysqli->prepare("INSERT INTO test(id,   
+          label) VALUES (?, ?)");`) or a safe library.                                                        
+          Details: https://sg.run/lZYG                                                                        
+                                                                                                              
+          133┆ $sql = "SELECT p.*, c.name AS category_name, c.slug AS category_slug
+          134┆         FROM products p
+          135┆         LEFT JOIN categories c ON c.id = p.category_id
+          136┆         WHERE $whereClause
+          137┆         ORDER BY $orderBy
+          138┆         LIMIT $perPage OFFSET $offset";
+   
+   ❯❯❱ [1mdocs.security.lumeegy-sqli-request-to-query[0m
+          ❰❰ Blocking ❱❱
+          Request data reaches an SQL string. Use a prepared statement with ? placeholders (CLAUDE.md: never
+          interpolate request data).                                                                        
+                                                                                                            
+          142┆ $stmt = db()->prepare($sql);
+   
+    ❯❱ [1mphp.lang.security.injection.tainted-callable.tainted-callable[0m
+          ❰❰ Blocking ❱❱
+          Callable based on user input risks remote code execution.
+          Details: https://sg.run/YGb33                            
+                                                                   
+          142┆ $stmt = db()->prepare($sql);
+   
+   ❯❯❱ [1mdocs.security.lumeegy-sqli-request-to-query[0m
+          ❰❰ Blocking ❱❱
+          Request data reaches an SQL string. Use a prepared statement with ? placeholders (CLAUDE.md: never
+          interpolate request data).                                                                        
+                                                                                                            
+          151┆ $stmt = db()->prepare("SELECT id, has_variants FROM products WHERE id IN ($placeholders)");
+   
+    ❯❱ [1mphp.lang.security.injection.tainted-callable.tainted-callable[0m
+          ❰❰ Blocking ❱❱
+          Callable based on user input risks remote code execution.
+          Details: https://sg.run/YGb33                            
+                                                                   
+          151┆ $stmt = db()->prepare("SELECT id, has_variants FROM products WHERE id IN ($placeholders)");
+   
+   ❯❯❱ [1mphp.lang.security.injection.tainted-sql-string.tainted-sql-string[0m
+          ❰❰ Blocking ❱❱
+          User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL
+          strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL    
+          strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate   
+          data from the database. Instead, use prepared statements (`$mysqli->prepare("INSERT INTO test(id,   
+          label) VALUES (?, ?)");`) or a safe library.                                                        
+          Details: https://sg.run/lZYG                                                                        
+                                                                                                              
+          151┆ $stmt = db()->prepare("SELECT id, has_variants FROM products WHERE id IN ($placeholders)");
+   
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities('<link rel="prev" href="' . h($shopUrl($page - 1)) . '">' . "\n");
+          279┆ echo '<link rel="prev" href="' . h($shopUrl($page - 1)) . '">' . "\n";
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities('<link rel="next" href="' . h($shopUrl($page + 1)) . '">' . "\n");
+          282┆ echo '<link rel="next" href="' . h($shopUrl($page + 1)) . '">' . "\n";
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($currentCat['name'] ?? ucfirst(str_replace('-',' ',$categorySlug))));
+          291┆ <?php if ($categorySlug): ?> / <?= h($currentCat['name'] ?? ucfirst(str_replace('-','
+               ',$categorySlug))) ?><?php endif; ?>                                                 
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($totalProducts > 0 ? $offset + 1 : 0);
+          351┆ Showing <strong><?= $totalProducts > 0 ? $offset + 1 : 0 ?>–<?= min($offset + $perPage,    
+               $totalProducts) ?></strong> of <strong><?= $totalProducts ?></strong> products<?= $search ?
+               ' for "<em>'.h($search).'</em>"' : '' ?>                                                   
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(min($offset + $perPage, $totalProducts));
+          351┆ Showing <strong><?= $totalProducts > 0 ? $offset + 1 : 0 ?>–<?= min($offset + $perPage,    
+               $totalProducts) ?></strong> of <strong><?= $totalProducts ?></strong> products<?= $search ?
+               ' for "<em>'.h($search).'</em>"' : '' ?>                                                   
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities($pid);
+          371┆ <div class="lume-product-card lume-reveal" data-pid="<?= $pid ?>" style="display: flex;
+               flex-direction: column;">                                                              
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($p['slug'] ?? ''));
+          372┆ <a href="<?= SITE_URL ?>/product.php?slug=<?= h($p['slug'] ?? '') ?>" class="lume-product-
+               card__img-wrap" style="overflow: hidden;">                                                
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h(thumb_url($displayImages[$pid] ?? ($p['image'] ?? ''), 600)));
+          373┆ <img src="<?= h(thumb_url($displayImages[$pid] ?? ($p['image'] ?? ''), 600)) ?>"
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($p['name'] ?? ''));
+          374┆ alt="<?= h($p['name'] ?? '') ?>"
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h(thumb_url($hoverImages[$pid], 600)));
+          378┆ data-hover-src="<?= h(thumb_url($hoverImages[$pid], 600)) ?>"
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($cData['hex'] ?? ''));
+          391┆ style="background:<?= h($cData['hex'] ?? '') ?>"
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($cn ?? ''));
+          392┆ title="<?= h($cn ?? '') ?>"
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h(thumb_url($cData['image'] ?? '', 600)));
+          394┆ data-image="<?= h(thumb_url($cData['image'] ?? '', 600)) ?>"
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($p['slug'] ?? ''));
+          401┆ <h3 class="lume-product-card__name"><a href="<?= SITE_URL ?>/product.php?slug=<?=
+               h($p['slug'] ?? '') ?>"><?= h($p['name'] ?? '') ?></a></h3>                      
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($p['name'] ?? ''));
+          401┆ <h3 class="lume-product-card__name"><a href="<?= SITE_URL ?>/product.php?slug=<?=
+               h($p['slug'] ?? '') ?>"><?= h($p['name'] ?? '') ?></a></h3>                      
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(product_price($p));
+          402┆ <div class="lume-product-card__price"><?= product_price($p) ?></div>
+             
+    thumb.php
+    ❯❱ [1mphp.lang.security.injection.tainted-filename.tainted-filename[0m
+          ❰❰ Blocking ❱❱
+          File name based on user input risks server-side request forgery.
+          Details: https://sg.run/Ayqp                                    
+                                                                          
+           53┆ if (file_exists($cachePath)) {
+            ⋮┆----------------------------------------
+          124┆ if (file_exists($cachePath)) {
+                   
+    track-order.php
+   ❯❯❱ [1mphp.lang.security.injection.echoed-request.echoed-request[0m
+          ❰❰ Blocking ❱❱
+          `Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when
+          showing data to users.                                                                             
+          Details: https://sg.run/Bqqb                                                                       
+                                                                                                             
+           ▶▶┆ Autofix ▶ echo htmlentities(h($orderNumber));
+           79┆ <input class="lume-form__input" type="text" id="order_number" name="order_number"
+               placeholder="e.g. LME-1A2B3C-250101" value="<?= h($orderNumber) ?>" required     
+               autocomplete="off">                                                              
+            ⋮┆----------------------------------------
+           ▶▶┆ Autofix ▶ echo htmlentities(h($email));
+           83┆ <input class="lume-form__input" type="email" id="email" name="email" placeholder="Email
+               used during checkout" value="<?= h($email) ?>" required>                               

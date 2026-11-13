@@ -1,0 +1,224 @@
+# Custom Semgrep rules for LUMEEGY (plain PHP, no framework).
+# Run alongside the registry rulesets, from the repo root:
+#   semgrep scan --config p/php --config p/owasp-top-ten --config docs/security/semgrep-lumeegy.yml \
+#     --exclude includes/vendor --exclude assets --exclude docs
+# Every result is triaged (true / false positive) in the Vulnerability Assessment Report.
+
+rules:
+  # ── SQL injection ────────────────────────────────────────────
+  - id: lumeegy-sqli-request-to-query
+    mode: taint
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Request data reaches an SQL string. Use a prepared statement with ? placeholders
+      (CLAUDE.md: never interpolate request data).
+    metadata:
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: $_SERVER
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: (int) $X
+          - pattern: intval(...)
+          - pattern: (float) $X
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $DB->query($SQL, ...)
+              - pattern: $DB->prepare($SQL, ...)
+              - pattern: $DB->exec($SQL, ...)
+          - focus-metavariable: $SQL
+
+  - id: lumeegy-sql-built-by-concatenation
+    languages: [php]
+    severity: WARNING
+    message: >-
+      SQL text is built by concatenation. Safe only if every joined piece is a constant or
+      comes from a whitelist (e.g. ORDER BY). Check and document.
+    metadata:
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+    pattern-either:
+      - pattern: $DB->query($A . $B, ...)
+      - pattern: $DB->prepare($A . $B, ...)
+      - pattern: $DB->exec($A . $B, ...)
+
+  # ── XSS ──────────────────────────────────────────────────────
+  - id: lumeegy-xss-request-echoed
+    mode: taint
+    languages: [php]
+    severity: ERROR
+    message: Request data is printed without h() / htmlspecialchars().
+    metadata:
+      cwe: "CWE-79: Cross-site Scripting"
+      owasp: "A03:2021 - Injection"
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: $_SERVER['REQUEST_URI']
+          - pattern: $_SERVER['PHP_SELF']
+          - pattern: $_SERVER['HTTP_REFERER']
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: h(...)
+          - pattern: htmlspecialchars(...)
+          - pattern: htmlentities(...)
+          - pattern: json_encode(...)
+          - pattern: (int) $X
+          - pattern: intval(...)
+          - pattern: number_format(...)
+          - pattern: urlencode(...)
+          - pattern: rawurlencode(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: echo $X;
+              - pattern: print($X)
+              - pattern: printf($X, ...)
+          - focus-metavariable: $X
+
+  # ── Access control: admin pages ─────────────────────────────
+  - id: lumeegy-admin-page-without-auth-guard
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      Admin page does not require admin/includes/auth.php, so it may be reachable
+      without the admin role check and CSRF enforcement.
+    metadata:
+      cwe: "CWE-862: Missing Authorization"
+      owasp: "A01:2021 - Broken Access Control"
+    paths:
+      include:
+        - "/admin/*.php"
+      exclude:
+        - "/admin/login.php"
+    pattern-regex: '\A(?![\s\S]*includes/auth\.php)'
+
+  - id: lumeegy-admin-api-without-role-check
+    languages: [generic]
+    severity: ERROR
+    message: Admin API endpoint does not check role === 'admin' and admin_enforce_csrf().
+    metadata:
+      cwe: "CWE-862: Missing Authorization"
+      owasp: "A01:2021 - Broken Access Control"
+    paths:
+      include:
+        - "/admin/api/*.php"
+        - "/api/admin-*.php"
+    pattern-regex: '\A(?![\s\S]*(includes/auth\.php|admin_enforce_csrf))'
+
+  # ── CSRF: storefront POST handlers ──────────────────────────
+  - id: lumeegy-post-handler-without-csrf
+    languages: [generic]
+    severity: WARNING
+    message: >-
+      File handles POST but never calls csrf_verify(). Fine only for machine endpoints
+      (payment webhook, analytics beacons); otherwise add the check.
+    metadata:
+      cwe: "CWE-352: Cross-Site Request Forgery"
+      owasp: "A01:2021 - Broken Access Control"
+    paths:
+      include:
+        - "/*.php"
+        - "/api/*.php"
+    pattern-regex: '\A(?=[\s\S]*(REQUEST_METHOD[^\n]*POST|\$_POST\[))(?![\s\S]*(csrf_verify|admin_enforce_csrf))'
+
+  # ── File upload ─────────────────────────────────────────────
+  - id: lumeegy-upload-without-mime-check
+    languages: [generic]
+    severity: ERROR
+    message: move_uploaded_file() in a file with no finfo MIME check.
+    metadata:
+      cwe: "CWE-434: Unrestricted Upload of File with Dangerous Type"
+      owasp: "A04:2021 - Insecure Design"
+    pattern-regex: '\A(?=[\s\S]*move_uploaded_file)(?![\s\S]*finfo)'
+
+  - id: lumeegy-upload-keeps-client-filename
+    languages: [php]
+    severity: WARNING
+    message: >-
+      Uploaded file is saved using the client's file name. Use a random name and an
+      extension chosen from the detected MIME type.
+    metadata:
+      cwe: "CWE-73: External Control of File Name or Path"
+    pattern-either:
+      - pattern: move_uploaded_file($TMP, <... $_FILES[$K]['name'] ...>)
+      - pattern: move_uploaded_file($TMP, <... $F['name'] ...>)
+
+  # ── Weak randomness for secrets ─────────────────────────────
+  - id: lumeegy-weak-random-token
+    languages: [php]
+    severity: WARNING
+    message: rand()/mt_rand()/uniqid() are predictable. Use random_bytes() or random_int() for tokens.
+    metadata:
+      cwe: "CWE-338: Use of Cryptographically Weak PRNG"
+      owasp: "A02:2021 - Cryptographic Failures"
+    pattern-either:
+      - pattern: rand(...)
+      - pattern: mt_rand(...)
+      - pattern: uniqid(...)
+      - pattern: str_shuffle(...)
+
+  # ── Error handling / information leak ───────────────────────
+  - id: lumeegy-exception-message-to-user
+    languages: [php]
+    severity: WARNING
+    message: >-
+      Exception message is sent to the user. Log it and show a generic message
+      with a reference ID instead.
+    metadata:
+      cwe: "CWE-209: Information Exposure Through an Error Message"
+      owasp: "A04:2021 - Insecure Design"
+    patterns:
+      - pattern-inside: |
+          try { ... } catch ($T $E) { ... }
+      - pattern-either:
+          - pattern: echo <... $E->getMessage() ...>;
+          - pattern: die(<... $E->getMessage() ...>)
+          - pattern: exit(<... $E->getMessage() ...>)
+          - pattern: json_encode(<... $E->getMessage() ...>)
+          - pattern: $ERR = <... $E->getMessage() ...>;
+
+  # ── Open redirect ───────────────────────────────────────────
+  - id: lumeegy-open-redirect
+    mode: taint
+    languages: [php]
+    severity: ERROR
+    message: Request data used as a redirect target. Pass it through safe_redirect_path().
+    metadata:
+      cwe: "CWE-601: Open Redirect"
+      owasp: "A01:2021 - Broken Access Control"
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_SERVER['HTTP_REFERER']
+    pattern-sanitizers:
+      - pattern: safe_redirect_path(...)
+    pattern-sinks:
+      - pattern-either:
+          - pattern: header("..." . $X)
+          - pattern: header($X)
+          - pattern: redirect($X)
+
+  # ── Project rule: order status and stock ────────────────────
+  - id: lumeegy-direct-order-status-update
+    languages: [generic]
+    severity: WARNING
+    message: >-
+      Direct UPDATE of orders.status. Use set_order_status() / cancel_order() so stock
+      stays consistent (CLAUDE.md). Expected only inside includes/functions.php.
+    metadata:
+      cwe: "CWE-841: Improper Enforcement of Behavioral Workflow"
+    pattern-regex: '(?i)UPDATE\s+orders\s+SET\s+[^;]*\bstatus\s*='
