@@ -1,0 +1,6 @@
+Chart.js loaded with SRI (integrity attribute present): true
+window.Chart defined after load: function
+canvas elements on the dashboard: 1
+console errors/warnings: 
+error: Failed to load resource: the server responded with a status of 404 (Not Found)
+note: the single 404 in the console is /favicon.ico, a file the site never had (it was there before this change; unrelated to Chart.js).
