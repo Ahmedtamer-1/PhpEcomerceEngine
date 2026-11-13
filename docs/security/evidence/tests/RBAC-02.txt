@@ -1,0 +1,7 @@
+RBAC-02  IDOR on orders, customer A, 2026-11-13 20:25:15
+Order 1 = A's (LME-AAA111), order 2 = B's (LME-BBB222). Both set to pending_payment for this test.
+control  instapay-upload.php?order_id=1 (own): 200 ->  | shows AAA111=1 BBB222=0
+attack   instapay-upload.php?order_id=2 (B's): 302 -> http://localhost:8090/track-order.php | shows AAA111=0 BBB222=0
+attack   track-order B's number + A's email:   200 ->  | shows AAA111=0 BBB222=1
+control  track-order A's number + A's email:   200 ->  | shows AAA111=1 BBB222=0
+attack   account dashboard lists only own orders: 200 ->  | shows AAA111=1 BBB222=0

@@ -1,0 +1,7 @@
+SESS-01  Cookie flags and session ID rotation at login (headers), 2026-11-13 20:26:09
+before login: Set-Cookie: lumeegy_session=4sh0jp79b6284veu66fvdsv7p0; path=/; HttpOnly; SameSite=Lax
+after login:
+Set-Cookie: lumeegy_session=i89524e5q27bnc0sjssa6nmbaa; path=/; HttpOnly; SameSite=Lax
+Set-Cookie: adn_remember=<value hidden>; expires=Tue, 12 Jan 2027 18:26:10 GMT; Max-Age=5184000; path=/; HttpOnly; SameSite=Lax
+session ID changed at login: YES
+Secure flag is not set because the lab runs on plain HTTP; the code adds it when the request is HTTPS.

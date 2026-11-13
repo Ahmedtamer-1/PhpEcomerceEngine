@@ -1,0 +1,9 @@
+SESS-02  Session fixation + logout, 2026-11-13 20:25:12
+1) Send a session ID the server never issued:
+HTTP/1.1 200 OK
+Set-Cookie: lumeegy_session=0h7gbheuk68jgefi9c345kd4ce; path=/; HttpOnly; SameSite=Lax
+   -> server issued a different ID (strict mode, H2): pass if the Set-Cookie value is not attacker123
+2) Customer A logs in, copy the cookie, log out, replay the old cookie:
+login S2 -> 302 http://localhost:8090/account.php
+   dashboard with cookie before logout: 1 order rows of A (control, expect 1)
+   dashboard with the SAME old cookie after logout: 0 order rows (expect 0 = old session is dead)
