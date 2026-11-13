@@ -257,7 +257,7 @@ if (!$showSuccess && $_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
 
                         } elseif ($paymentMethod === 'instapay') {
-                            db()->prepare("UPDATE orders SET status = 'pending_payment' WHERE id = ?")->execute([$orderId]);
+                            set_order_status((int)$orderId, 'pending_payment');
                             cart_clear();
                             // InstaPay orders were the ONLY branch that never sent a
                             // confirmation — and they are the ones that most need it,
