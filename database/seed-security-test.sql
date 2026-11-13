@@ -26,6 +26,7 @@ TRUNCATE TABLE products;
 TRUNCATE TABLE categories;
 TRUNCATE TABLE login_attempts;
 TRUNCATE TABLE activity_log;
+TRUNCATE TABLE security_events;
 TRUNCATE TABLE contact_messages;
 TRUNCATE TABLE newsletter_subscribers;
 TRUNCATE TABLE shipping_zones;
