@@ -69,15 +69,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // chosen from it. The browser-sent type and the original
                 // filename are both attacker-controlled, and keeping the
                 // uploaded extension allowed e.g. a ".php" saved in the web root.
-                $allowed = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/webp' => 'webp',
-                            'image/svg+xml' => 'svg', 'image/x-icon' => 'ico', 'image/vnd.microsoft.icon' => 'ico'];
-                $mime = (new finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);
-                if (!isset($allowed[$mime])) {
-                    $error = 'Invalid file type for ' . $field;
+                $chk = upload_check_image($file, [
+                    'allow' => ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/webp' => 'webp',
+                                'image/x-icon' => 'ico', 'image/vnd.microsoft.icon' => 'ico'],
+                    'allow_svg' => true, 'user_id' => (int)$adminUser['id'],
+                ]);
+                if (!$chk['ok']) {
+                    $error = 'Invalid file for ' . $field . ': ' . $chk['error'];
                     break;
                 }
-                $ext     = $allowed[$mime];
-                $newName = $field . '_' . time() . '.' . $ext;
+                $ext     = $chk['ext'];
+                $newName = upload_random_name($field, $ext);
                 $dest    = ROOT_PATH . '/assets/images/' . $newName;
                 if (move_uploaded_file($file['tmp_name'], $dest)) {
                     optimize_image_in_place($dest, 1200, 85);

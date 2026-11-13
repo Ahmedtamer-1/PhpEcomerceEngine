@@ -1,0 +1,23 @@
+--- H3 upload checks (before); admin login HTTP 302 ---
+A) api/media.php (media library, direct upload)
+  ACCEPTED  valid PNG (control, should pass)  -> stored as media_1794592105_aeb0322b.png
+  ACCEPTED  valid JPEG (control, should pass)  -> stored as media_1794592105_e8a20d9f.jpg
+  REJECTED  shell.php (PHP code, image/png header sent)
+  REJECTED  shell.php.jpg (PHP code)
+  ACCEPTED  PHP appended to a real JPEG (polyglot) as innocent.jpg  -> stored as media_1794592105_27791430.jpg
+  ACCEPTED  valid PNG but 9 MB (oversized)  -> stored as media_1794592105_dc4390fd.png
+  ACCEPTED  valid PNG with path-traversal name ../../evil.png  -> stored as media_1794592105_66340c2d.png
+  ACCEPTED  SVG with <script> and onload  -> stored as media_1794592105_9860ea71.svg
+  ACCEPTED  clean SVG (control, should pass)  -> stored as media_1794592105_8c956c24.svg
+B) admin/variants.php (variant image)
+  no rejection message  valid PNG (control, should pass)
+  no rejection message  shell.php (PHP code, image/png header sent)
+  no rejection message  PHP appended to a real JPEG (polyglot) as innocent.jpg
+C) files that now exist in assets/images/products (new): media_1794592105_27791430.jpg, media_1794592105_66340c2d.png, media_1794592105_8c956c24.svg, media_1794592105_9860ea71.svg, media_1794592105_aeb0322b.png, media_1794592105_dc4390fd.png, media_1794592105_e8a20d9f.jpg, var_1794592105_1f7102.png, var_1794592106_fc3920.jpg
+   any file with a script extension or PHP code stored: true
+   stored names are random hex (no client name kept): true
+D) security_events (upload_rejected):
+severity	reason	client_name
+warning	mime not allowed	shell.php
+warning	mime not allowed	shell.php.jpg
+

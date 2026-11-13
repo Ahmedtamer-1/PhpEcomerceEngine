@@ -138,11 +138,15 @@ function media_store_file(string $tmpPath, string $origName, ?array $poster, ?in
     $mime = (new finfo(FILEINFO_MIME_TYPE))->file($tmpPath);
     // Some MP4s are reported as application/octet-stream; check the header.
     if ($mime === 'application/octet-stream' && media_is_mp4($tmpPath)) $mime = 'video/mp4';
+    $rawName  = $origName; // the name as sent: the filename field is plain POST data, so check it before cleaning
     $origName = mb_substr(basename(str_replace('\\', '/', $origName)), 0, 200) ?: 'upload';
 
     if (isset(MEDIA_IMAGE_MIMES[$mime])) {
-        $ext  = MEDIA_IMAGE_MIMES[$mime];
-        $name = 'media_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+        // Same shared check as every other image upload (size, type, content, SVG).
+        $chk = upload_check_image_path($tmpPath, $rawName, ['allow_svg' => true, 'user_id' => $userId]);
+        if (!$chk['ok']) throw new RuntimeException($chk['error']);
+        $ext  = $chk['ext'];
+        $name = upload_random_name('media', $ext);
         if (!is_dir(UPLOADS_PATH)) mkdir(UPLOADS_PATH, 0755, true);
         $dest = UPLOADS_PATH . '/' . $name;
         $origSize = filesize($tmpPath);
@@ -182,9 +186,10 @@ function media_store_file(string $tmpPath, string $origName, ?array $poster, ?in
 
     // 3) Poster sent by the browser (used when ffmpeg didn't make one).
     if (!$posterRel && $poster && ($poster['error'] ?? 1) === UPLOAD_ERR_OK) {
-        $pm = (new finfo(FILEINFO_MIME_TYPE))->file($poster['tmp_name']);
-        $pext = ['image/jpeg' => 'jpg', 'image/webp' => 'webp', 'image/png' => 'png'][$pm] ?? null;
-        if ($pext && $poster['size'] < 5 * 1024 * 1024) {
+        $pchk = upload_check_image($poster, ['allow' => ['image/jpeg' => 'jpg', 'image/webp' => 'webp', 'image/png' => 'png'],
+                                              'max_bytes' => 5 * 1024 * 1024, 'user_id' => $userId]);
+        $pext = $pchk['ok'] ? $pchk['ext'] : null;
+        if ($pext) {
             $pdest = $absDir . '/' . $base . '_poster.' . $pext;
             if (move_uploaded_file($poster['tmp_name'], $pdest)) {
                 optimize_image_in_place($pdest, 1920, 82);

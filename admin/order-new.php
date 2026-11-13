@@ -83,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             ]);
 
             if ($status !== 'pending') {
-                db()->prepare('UPDATE orders SET status = ? WHERE id = ?')->execute([$status, $orderId]);
+                set_order_status((int)$orderId, $status);
             }
             $num = db()->prepare('SELECT order_number FROM orders WHERE id = ?');
             $num->execute([$orderId]);

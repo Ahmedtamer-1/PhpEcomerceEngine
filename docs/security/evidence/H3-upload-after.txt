@@ -1,0 +1,34 @@
+--- H3 upload checks (after); admin login HTTP 302 ---
+A) api/media.php (media library, direct upload)
+  ACCEPTED  valid PNG (control, should pass)  -> stored as media_5f6625c8a431183970909d78e2842c5b.png
+  ACCEPTED  valid JPEG (control, should pass)  -> stored as media_7ad5a73ea7241f466baa2c588a14f59d.jpg
+  REJECTED  shell.php (PHP code, image/png header sent)
+  REJECTED  shell.php.jpg (PHP code)
+  REJECTED  PHP appended to a real JPEG (polyglot) as innocent.jpg
+  REJECTED  valid PNG but 9 MB (oversized)
+  ACCEPTED  valid PNG with path-traversal name ../../evil.png  -> stored as media_f3106cd88f808bb0c3339ae69ab3468f.png
+  REJECTED  SVG with <script> and onload
+  ACCEPTED  clean SVG (control, should pass)  -> stored as media_2a9e551736a5050dd024d6da2a7884b2.svg
+B) admin/variants.php (variant image)
+  no rejection message  valid PNG (control, should pass)
+  REJECTED  shell.php (PHP code, image/png header sent)  ("This file name is not allowed.")
+  REJECTED  PHP appended to a real JPEG (polyglot) as innocent.jpg  ("The file contains code and was rejected.")
+B2) chunked upload path (filename is a plain POST field, so ../ can really arrive)
+  REJECTED  valid PNG, filename ../../evil.png  ("Invalid file name.")
+  REJECTED  valid PNG, filename shell.php.png  ("This file name is not allowed.")
+  ACCEPTED  valid PNG, filename logo.png (control)
+C) files that now exist in assets/images/products (new): media_2a9e551736a5050dd024d6da2a7884b2.svg, media_5f6625c8a431183970909d78e2842c5b.png, media_690ca7466ed044c2772c099651ee662b.png, media_7ad5a73ea7241f466baa2c588a14f59d.jpg, media_f3106cd88f808bb0c3339ae69ab3468f.png, var_e38ca9bc53c50c099b3ec54fc1668124.png
+   any file with a script extension or PHP code stored: false
+   stored names are random hex (no client name kept): true
+D) security_events (upload_rejected):
+severity	reason	client_name
+warning	script extension in name	shell.php
+warning	script extension in name	shell.php.jpg
+warning	embedded code	innocent.jpg
+warning	too large	big.png
+warning	unsafe svg	evil.svg
+warning	script extension in name	shell.php
+warning	embedded code	innocent.jpg
+warning	bad file name	../../evil.png
+warning	script extension in name	shell.php.png
+

@@ -1,0 +1,8 @@
+--- H2 session checks (before) ---
+1) request with a made-up session ID "attackerchosen1234567890abcdef"
+   Set-Cookie: (none: the server accepted the attacker-chosen ID)
+   made-up ID replaced by a new one: false
+2) storefront session cookie: lumeegy_session=l3j9vne3q2s4pfujkku6vf60pl; path=/; HttpOnly; SameSite=Lax
+3) admin login response: HTTP 302; session Set-Cookie: lumeegy_session=vg7ffo8i4kba0ce8h5gjs1t42v; path=/; HttpOnly; SameSite=Lax
+   admin session cookie is SameSite=Strict: false
+4) session ID passed in the URL is ignored: true

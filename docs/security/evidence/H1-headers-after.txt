@@ -1,0 +1,54 @@
+$ curl -I http://localhost:8090/
+HTTP/1.1 200 OK
+Date: Fri, 13 Nov 2026 17:44:16 GMT
+Server: Apache
+X-Content-Type-Options: nosniff
+X-Frame-Options: SAMEORIGIN
+Referrer-Policy: strict-origin-when-cross-origin
+Content-Security-Policy: ... frame-ancestors 'self'
+Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Set-Cookie: lumeegy_session=g4da5gtb8f88o8hp4ac5t1l2oe; path=/; HttpOnly; SameSite=Lax
+Expires: Thu, 19 Nov 1981 08:52:00 GMT
+Cache-Control: no-store, no-cache, must-revalidate
+Pragma: no-cache
+Content-Type: text/html; charset=UTF-8
+
+
+$ curl -I http://localhost:8090/does-not-exist.php
+HTTP/1.1 404 Not Found
+Date: Fri, 13 Nov 2026 17:44:16 GMT
+Server: Apache
+X-Content-Type-Options: nosniff
+X-Frame-Options: SAMEORIGIN
+Referrer-Policy: strict-origin-when-cross-origin
+Content-Security-Policy: ... frame-ancestors 'self'
+Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Content-Type: text/html; charset=iso-8859-1
+
+
+$ curl -I http://localhost:8090/includes/
+HTTP/1.1 403 Forbidden
+Date: Fri, 13 Nov 2026 17:44:16 GMT
+Server: Apache
+X-Content-Type-Options: nosniff
+X-Frame-Options: SAMEORIGIN
+Referrer-Policy: strict-origin-when-cross-origin
+Content-Security-Policy: ... frame-ancestors 'self'
+Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Content-Type: text/html; charset=iso-8859-1
+
+
+
+$ curl -k -I https://localhost:8443/   (HTTPS test listener)
+HTTP/1.1 200 OK
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Content-Security-Policy: ... frame-ancestors 'self'
+
+$ curl -I http://localhost:8090/ | findstr /i "Strict-Transport X-Powered X-XSS"
+(no output: none of these headers over plain HTTP)
