@@ -280,9 +280,85 @@ function login_throttled(string $email): bool
     return false;
 }
 
+/** Attempts counted against a throttle key in the current window. */
+function login_attempt_count(string $key, int $windowSeconds = 900): int
+{
+    $st = db()->prepare('SELECT COUNT(*) FROM login_attempts WHERE identifier = ? AND attempted_at > DATE_SUB(NOW(), INTERVAL ? SECOND)');
+    $st->execute([$key, $windowSeconds]);
+    return (int)$st->fetchColumn();
+}
+
+/**
+ * Seconds until the lock on this email (from this address) lifts, 0 if it is
+ * not locked. A key is locked when it holds `max` attempts in the window; it
+ * opens again when enough of the oldest ones age out.
+ */
+function login_lockout_remaining(string $email, int $windowSeconds = 900): int
+{
+    $remaining = 0;
+    foreach (login_throttle_keys($email) as [$key, $max]) {
+        $st = db()->prepare(
+            'SELECT TIMESTAMPDIFF(SECOND, NOW(), DATE_ADD(attempted_at, INTERVAL ? SECOND))
+             FROM login_attempts WHERE identifier = ? AND attempted_at > DATE_SUB(NOW(), INTERVAL ? SECOND)
+             ORDER BY attempted_at ASC, id ASC'
+        );
+        $st->execute([$windowSeconds, $key, $windowSeconds]);
+        $secs = $st->fetchAll(PDO::FETCH_COLUMN);
+        if (count($secs) >= $max) $remaining = max($remaining, (int)$secs[count($secs) - $max]);
+    }
+    return max(0, $remaining);
+}
+
+/** The text shown on the login pages when throttled: how long to wait, not a fixed number. */
+function login_lockout_message(string $email): string
+{
+    $secs = login_lockout_remaining($email);
+    if ($secs <= 0) return 'Too many attempts. Please try again shortly.';
+    $mins = (int)ceil($secs / 60);
+    return 'Too many attempts. Try again in ' . $mins . ' minute' . ($mins === 1 ? '' : 's') . '.';
+}
+
+/**
+ * Record a failed login. Also:
+ *  - logs `login_locked` the first time a key reaches its limit (not on every
+ *    blocked request, so the log is not flooded);
+ *  - slows the answer down after the 3rd failure for the same email+address:
+ *    0.5 s x (failures - 2), at most 3 s, which makes brute force slower still.
+ */
 function login_failed(string $email): void
 {
-    foreach (login_throttle_keys($email) as [$key]) record_login_attempt($key, false);
+    $scopes = ['this email from this address', 'this address (many accounts)', 'this account (many addresses)'];
+    $delayUs = 0;
+    foreach (login_throttle_keys($email) as $i => [$key, $max]) {
+        record_login_attempt($key, false);
+        $n = login_attempt_count($key);
+        if ($n === $max) {
+            security_log('login_locked', 'critical', ['identifier' => strtolower(trim($email)), 'details' => 'limit of ' . $max . ' reached for ' . $scopes[$i]]);
+        }
+        if ($i === 0 && $n >= 3) $delayUs = min(3000000, 500000 * ($n - 2));
+    }
+    if ($delayUs > 0) usleep($delayUs);
+}
+
+/**
+ * Admin unlock: clear the email's throttle counters, including the email+address
+ * ones for every address seen in the last day. The address-wide counter is left alone
+ * (it protects against password spraying). Returns the rows removed.
+ */
+function login_unlock(string $email): int
+{
+    $email = strtolower(trim($email));
+    $removed = 0;
+    // The email+address key is a hash, so it can't be looked up by email alone;
+    // try it for every address that has recent attempts on record.
+    $ips = db()->query('SELECT DISTINCT ip_address FROM login_attempts WHERE attempted_at > DATE_SUB(NOW(), INTERVAL 1 DAY)');
+    $del = db()->prepare('DELETE FROM login_attempts WHERE identifier = ?');
+    foreach ($ips->fetchAll(PDO::FETCH_COLUMN) as $ip) {
+        $del->execute(['ipe:' . sha1($email . '|' . $ip)]);
+        $removed += $del->rowCount();
+    }
+    $del->execute([$email]);
+    return $removed + $del->rowCount();
 }
 
 function login_succeeded(string $email): void
