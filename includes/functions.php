@@ -15,6 +15,16 @@ function lume_session_start(): void
 {
     if (session_status() === PHP_SESSION_NONE) {
         session_name(SESSION_NAME);
+        // Strict mode: PHP refuses a session ID it never issued and starts a new
+        // one, so an attacker can't plant a chosen ID in a victim's browser
+        // (session fixation). Cookies only: no session IDs in URLs.
+        ini_set('session.use_strict_mode', '1');
+        ini_set('session.use_only_cookies', '1');
+        // Admin sessions are issued from /admin/ (the admin login) with
+        // SameSite=Strict, so another site can never trigger an admin request
+        // with the cookie. The storefront stays Lax: Strict would drop the
+        // customer's session when they return from Google or Paymob.
+        $reqPath = (string)parse_url((string)($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
         session_set_cookie_params([
             'lifetime' => 0,
             'path' => '/',
@@ -24,7 +34,7 @@ function lume_session_start(): void
                         || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'
                         || (int)($_SERVER['SERVER_PORT'] ?? 0) === 443,
             'httponly' => true,
-            'samesite' => 'Lax',
+            'samesite' => str_contains($reqPath, '/admin/') ? 'Strict' : 'Lax',
         ]);
         session_start();
         // Signed out because the session expired (closing the browser, or the
@@ -1277,28 +1287,110 @@ function optimize_image_in_place(string $filepath, int $maxWidth = 1600, int $qu
     return $success;
 }
 
+// ── Shared upload check (every image upload handler goes through this) ──
+const UPLOAD_MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8 MB per image, before optimisation
+
+/** A random file name; the extension always comes from the detected type. */
+function upload_random_name(string $prefix, string $ext): string
+{
+    return $prefix . '_' . bin2hex(random_bytes(16)) . '.' . $ext;
+}
+
+/**
+ * SVG is XML that can carry script. Accept it only if it parses without a
+ * DOCTYPE/entities and has no script-capable elements, event attributes or
+ * external/script links. (assets/.htaccess also sends a no-script CSP for files
+ * served from assets/, as a second layer.)
+ */
+function upload_svg_is_safe(string $svg): bool
+{
+    if (stripos($svg, '<!DOCTYPE') !== false || stripos($svg, '<!ENTITY') !== false) return false;
+    $prev = libxml_use_internal_errors(true);
+    $dom = new DOMDocument();
+    $ok = $dom->loadXML($svg, LIBXML_NONET);
+    libxml_clear_errors();
+    libxml_use_internal_errors($prev);
+    if (!$ok || !$dom->documentElement || strtolower($dom->documentElement->localName) !== 'svg') return false;
+    $bad = ['script', 'foreignobject', 'iframe', 'embed', 'object', 'animate', 'set', 'handler', 'listener'];
+    foreach ($dom->getElementsByTagName('*') as $el) {
+        if (in_array(strtolower($el->localName), $bad, true)) return false;
+        foreach ($el->attributes as $attr) {
+            $name = strtolower($attr->name);
+            $val  = strtolower(trim($attr->value));
+            if (str_starts_with($name, 'on')) return false;
+            if (preg_match('/^\s*(javascript|data|vbscript):/i', $val)) return false;
+            if (in_array($name, ['href', 'src'], true) && !str_starts_with($val, '#')) return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Check an image on disk. Returns ['ok' => true, 'mime', 'ext'] or
+ * ['ok' => false, 'error'] and logs `upload_rejected`. Rules: size limit, real
+ * type from the file's bytes (finfo) against a whitelist, no script-like file
+ * name (shell.php, shell.php.jpg, ../x), no embedded <?php / <script, a valid
+ * image (getimagesize), SVG only if sanitised.
+ * Options: allow (mime => ext), allow_svg, max_bytes, user_id.
+ */
+function upload_check_image_path(string $path, string $clientName, array $opts = []): array
+{
+    $allow = $opts['allow'] ?? ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
+    if (!empty($opts['allow_svg'])) $allow['image/svg+xml'] = 'svg';
+    $max = (int)($opts['max_bytes'] ?? UPLOAD_MAX_IMAGE_BYTES);
+
+    $reject = function (string $reason, string $msg) use ($clientName, $opts, $path): array {
+        security_log('upload_rejected', 'warning', ['user_id' => $opts['user_id'] ?? null, 'details' => [
+            'reason' => $reason, 'client_name' => $clientName, 'size' => is_file($path) ? filesize($path) : 0,
+        ]]);
+        return ['ok' => false, 'error' => $msg];
+    };
+
+    if (!is_file($path)) return $reject('no file', 'No file received.');
+    if (filesize($path) > $max) return $reject('too large', 'The file is too large (max ' . round($max / 1048576) . ' MB).');
+    if (preg_match('#[\\\\/\x00]|\.\.#', $clientName)) return $reject('bad file name', 'Invalid file name.');
+    if (preg_match('/\.(php\d?|phtml|phar|pht|phps|shtml|cgi|pl|asp|aspx|jsp|exe|sh|bat)(\.|$)/i', $clientName)) {
+        return $reject('script extension in name', 'This file name is not allowed.');
+    }
+
+    $mime = (new finfo(FILEINFO_MIME_TYPE))->file($path) ?: '';
+    if (!isset($allow[$mime])) return $reject('type not allowed: ' . $mime, 'This file type is not allowed.');
+
+    $data = (string)file_get_contents($path);
+    if ($mime === 'image/svg+xml') {
+        if (!upload_svg_is_safe($data)) return $reject('unsafe svg', 'This SVG contains active content and was rejected.');
+    } else {
+        if (preg_match('/<\?php|<script/i', $data)) return $reject('embedded code', 'The file contains code and was rejected.');
+        if (@getimagesize($path) === false) return $reject('not a valid image', 'The file is not a valid image.');
+    }
+    return ['ok' => true, 'mime' => $mime, 'ext' => $allow[$mime]];
+}
+
+/** Same check for a $_FILES entry: also requires that PHP received it as an upload. */
+function upload_check_image(array $file, array $opts = []): array
+{
+    $name = (string)($file['name'] ?? '');
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        security_log('upload_rejected', 'warning', ['user_id' => $opts['user_id'] ?? null, 'details' => ['reason' => 'upload error ' . (int)($file['error'] ?? -1), 'client_name' => $name]]);
+        return ['ok' => false, 'error' => 'The upload failed.'];
+    }
+    if (!is_uploaded_file((string)($file['tmp_name'] ?? ''))) {
+        security_log('upload_rejected', 'warning', ['user_id' => $opts['user_id'] ?? null, 'details' => ['reason' => 'not an uploaded file', 'client_name' => $name]]);
+        return ['ok' => false, 'error' => 'The upload failed.'];
+    }
+    return upload_check_image_path((string)$file['tmp_name'], $name, $opts);
+}
+
 function media_upload(array $file, ?int $userId = null): ?array
 {
     if ($file['error'] !== UPLOAD_ERR_OK)
         return null;
 
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
-    $mime = $finfo->file($file['tmp_name']);
-    $allowedMimes = [
-        'image/jpeg' => 'jpg',
-        'image/png' => 'png',
-        'image/webp' => 'webp',
-        'image/gif' => 'gif',
-        'image/svg+xml' => 'svg'
-    ];
+    $chk = upload_check_image($file, ['allow_svg' => true, 'user_id' => $userId]);
+    if (!$chk['ok']) return null;
 
-    if (!array_key_exists($mime, $allowedMimes)) {
-        security_log('upload_rejected', 'warning', ['user_id' => $userId, 'details' => ['reason' => 'mime not allowed', 'mime' => $mime, 'client_name' => $file['name'] ?? '']]);
-        return null;
-    }
-
-    $ext = $allowedMimes[$mime];
-    $newName = 'media_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+    $ext = $chk['ext'];
+    $newName = upload_random_name('media', $ext);
     $dest = UPLOADS_PATH . '/' . $newName;
     $filepath = 'assets/images/products/' . $newName; // Keep relative for DB storage
 
