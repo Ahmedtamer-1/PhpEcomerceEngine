@@ -24,6 +24,7 @@ All testing was performed **only on a local copy** of the site (Apache on localh
 | [part1-controls-spec.md](part1-controls-spec.md) | What Part 1 builds (controls C1–C4, hardening H1–H3, fixes S1–S3) and when each is done |
 | [semgrep-lumeegy.yml](semgrep-lumeegy.yml) | Custom static-analysis rules for this codebase |
 | [semgrep-triage.md](semgrep-triage.md) | Baseline Semgrep results, each marked true or false positive |
+| [findings.md](findings.md) | All baseline findings in one list (Semgrep, ZAP, setup), each with severity and the control that fixes it |
 | [code-review.md](code-review.md) | Manual code review notes (to come) |
 
 ## Evidence layout

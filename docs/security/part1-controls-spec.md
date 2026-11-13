@@ -15,6 +15,20 @@ Read first: [CLAUDE.md](../../CLAUDE.md) (code rules and git rules), [threat-mod
 - Git: branch `<type>/<kebab-topic>` from `main`, Conventional Commits (subject ≤72 chars), **one commit per file** (or up to 4 files for one identical change), stage by path, **no AI attribution** anywhere, merge commits only, never delete branches.
 - Test only on the local copy ([local-setup.md](local-setup.md)).
 
+## Step 0 – "Before" evidence (do this first, before changing any code)
+
+On a clean `main` with the seed loaded, take these screenshots into `docs/security/evidence/screenshots/`. They are the "before" half of the before/after proof in the report.
+
+| File | What to show |
+|---|---|
+| `before-C2-weak-password.png` | Registering with the password `password1` succeeds (only 8 characters are required today) |
+| `before-C4-lockout-message.png` | After 6 wrong logins: the fixed "Please wait 15 minutes" message, and the 6th attempt with the right password is refused |
+| `before-C3-raw-error.png` | An admin screen showing raw database error text, e.g. add a shipping zone with a name that already exists (`admin/shipping.php`) |
+| `before-C1-no-security-log.png` | The admin sidebar and Activity Log after those failed logins: no record of them anywhere |
+| `before-H1-headers.png` | `curl -I http://localhost:8090/` showing `X-Powered-By` and `X-XSS-Protection`, and no HSTS |
+
+Commit them on the first branch (`feat/security-event-log`) as `docs(security): add before screenshots for part 1`.
+
 ## Branches
 
 | Branch | Contains |
@@ -127,7 +141,7 @@ Read first: [CLAUDE.md](../../CLAUDE.md) (code rules and git rules), [threat-mod
 
 | ID | Change | Where | Done when |
 |---|---|---|---|
-| **H1** | Headers: remove deprecated `X-XSS-Protection`; add HSTS **only when HTTPS** (`Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" "expr=%{HTTPS} == 'on'"`); hide versions with `Header unset X-Powered-By` and `Header always unset X-Powered-By` | `.htaccess` | `curl -I` shows no `X-XSS-Protection`/`X-Powered-By`; HSTS appears only on HTTPS |
+| **H1** | Headers (findings ZAP-02, ZAP-03, ZAP-04, CFG-01/03/05): change every `Header set` to **`Header always set`** so error pages (403/404) get the headers too; remove deprecated `X-XSS-Protection`; add HSTS **only when HTTPS** (`Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" "expr=%{HTTPS} == 'on'"`); hide versions with `Header always unset X-Powered-By` (and note `ServerTokens Prod` as a hosting setting); add `integrity` + `crossorigin="anonymous"` to the Chart.js `<script>` in `admin/includes/header.php:30` | `.htaccess`, `admin/includes/header.php` | `curl -I` on a page **and** on a 404 shows the security headers, no `X-XSS-Protection`/`X-Powered-By`; HSTS only on HTTPS; the admin dashboard chart still loads |
 | **H2** | Sessions: `ini_set('session.use_strict_mode', '1')` and `ini_set('session.use_only_cookies', '1')` before `session_start()`; admin sessions use `SameSite=Strict` (set the cookie params by path or after admin login) | `includes/functions.php` (`lume_session_start()`) | A made-up session ID sent in the cookie is replaced by a new one (fixation test passes) |
 | **H3** | Uploads: one shared check used by every handler: max size (e.g. 5 MB images), `finfo` MIME whitelist, extension chosen **from the detected MIME** (never from the client name), random file name (`bin2hex(random_bytes(16))`), reject SVG unless sanitised; log `upload_rejected` (C1) | `includes/functions.php` (`media_upload()`, used by `api/media.php` and `api/admin-products.php`), `admin/variants.php`, `admin/settings.php`, `includes/media-video.php`. All uploads are admin-only; customers have no upload form (InstaPay receipts go by WhatsApp). | `shell.php`, `shell.php.jpg`, PHP-in-JPG, oversized file and `../` name are all rejected and logged |
 | **S2** | Route the two direct status updates through `set_order_status()` | `admin/order-new.php:86`, `checkout.php:260` | Semgrep `lumeegy-direct-order-status-update` only flags `includes/functions.php` |
