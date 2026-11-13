@@ -19,8 +19,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !csrf_verify($_POST['csrf'] ?? ''))
 
     // Rate limiting
     if (login_throttled($email)) {
-        security_log('login_locked', 'critical', ['identifier' => $email, 'details' => 'admin login blocked by rate limit']);
-        $error = 'Too many login attempts. Please wait 15 minutes.';
+        // The lock itself is logged once, in login_failed(), when the limit is reached.
+        $error = login_lockout_message($email);
     } else {
         $stmt = db()->prepare('SELECT id, password_hash, role FROM users WHERE email = ?');
         $stmt->execute([$email]);
@@ -39,8 +39,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !csrf_verify($_POST['csrf'] ?? ''))
                 exit;
             }
         } else {
-            login_failed($email);
+            // Log first: login_failed() may log the lock and then sleeps.
             security_log('login_failed', 'warning', ['identifier' => $email, 'details' => 'admin login']);
+            login_failed($email);
             $error = 'Invalid email or password.';
         }
     }
