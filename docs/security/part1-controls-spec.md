@@ -15,6 +15,20 @@ Read first: [CLAUDE.md](../../CLAUDE.md) (code rules and git rules), [threat-mod
 - Git: branch `<type>/<kebab-topic>` from `main`, Conventional Commits (subject ≤72 chars), **one commit per file** (or up to 4 files for one identical change), stage by path, **no AI attribution** anywhere, merge commits only, never delete branches.
 - Test only on the local copy ([local-setup.md](local-setup.md)).
 
+## Step 0 – "Before" evidence (do this first, before changing any code)
+
+On a clean `main` with the seed loaded, take these screenshots into `docs/security/evidence/screenshots/`. They are the "before" half of the before/after proof in the report.
+
+| File | What to show |
+|---|---|
+| `before-C2-weak-password.png` | Registering with the password `password1` succeeds (only 8 characters are required today) |
+| `before-C4-lockout-message.png` | After 6 wrong logins: the fixed "Please wait 15 minutes" message, and the 6th attempt with the right password is refused |
+| `before-C3-raw-error.png` | An admin screen showing raw database error text, e.g. add a shipping zone with a name that already exists (`admin/shipping.php`) |
+| `before-C1-no-security-log.png` | The admin sidebar and Activity Log after those failed logins: no record of them anywhere |
+| `before-H1-headers.png` | `curl -I http://localhost:8090/` showing `X-Powered-By` and `X-XSS-Protection`, and no HSTS |
+
+Commit them on the first branch (`feat/security-event-log`) as `docs(security): add before screenshots for part 1`.
+
 ## Branches
 
 | Branch | Contains |
