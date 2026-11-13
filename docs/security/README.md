@@ -31,7 +31,7 @@ All testing was performed **only on a local copy** of the site (Apache on localh
 
 | Folder | Contents |
 |---|---|
-| `evidence/zap/` | `zap-before.html`, `zap-after.html`, context and alert screenshots, `ajax-spider-before.csv` (the browser's own background requests to Bing/Azure were removed; they were not part of the test) |
+| `evidence/zap/` | **`zap-before-summary.html` (start here: clean summary with our verdict per alert)**, `zap-before.html` (raw ZAP report), `zap-after.html`, context and alert screenshots, `ajax-spider-before.csv` (the browser's own background requests to Bing/Azure were removed; they were not part of the test) |
 | `evidence/burp/` | Repeater / Intruder / Proxy screenshots, named by test ID (`CSRF-02.png`), `csrf-poc.html` |
 | `evidence/semgrep/` | `semgrep-before.txt` / `.sarif`, `semgrep-after.txt` / `.sarif` |
 | `evidence/screenshots/` | Browser and admin-panel screenshots, named by test ID |
