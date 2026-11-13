@@ -11,6 +11,7 @@ header('Content-Type: application/json; charset=utf-8');
 // Auth check — admin only
 $user = current_user();
 if (!$user || ($user['role'] ?? '') !== 'admin') {
+    if ($user) security_log('access_denied', 'warning', ['user_id' => (int)$user['id'], 'details' => 'non-admin called an admin API']);
     http_response_code(403);
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
     exit;

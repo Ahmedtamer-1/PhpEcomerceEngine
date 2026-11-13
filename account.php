@@ -47,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'login') {
 
         // Rate limiting per email+IP, per IP and per email (see login_throttle_keys()).
         if (login_throttled($email)) {
+            security_log('login_locked', 'critical', ['identifier' => $email, 'details' => 'storefront login blocked by rate limit']);
             $error = 'Too many login attempts. Please wait 15 minutes.';
         } else {
             $stmt  = db()->prepare('SELECT id, password_hash FROM users WHERE email = ?');
@@ -55,11 +56,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'login') {
             if ($row && password_verify($pass, $row['password_hash'])) {
                 login_succeeded($email);
                 login_user((int)$row['id'], !empty($_POST['remember']));
+                security_log('login_success', 'info', ['user_id' => (int)$row['id'], 'identifier' => $email]);
                 // Local paths only — an absolute URL here was an open redirect
                 // (a phishing link could bounce users to any site after login).
                 redirect($redirectTo);
             } else {
                 login_failed($email);
+                security_log('login_failed', 'warning', ['identifier' => $email]);
                 $error = 'Invalid email or password.';
             }
         }

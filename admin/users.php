@@ -57,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['user_id'], $_POST['ro
     } else {
         db()->prepare('UPDATE users SET role = ? WHERE id = ?')->execute([$role, $uid]);
         log_activity('update_user_role', 'user', $uid, "Role: $role");
+        security_log('role_changed', 'critical', ['user_id' => (int)$adminUser['id'], 'details' => ['target_user_id' => $uid, 'new_role' => $role]]);
         header('Location: ' . SITE_URL . '/admin/users.php?msg=updated');
         exit;
     }

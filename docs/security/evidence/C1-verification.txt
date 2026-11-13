@@ -1,0 +1,33 @@
+1) events after 5 wrong + 1 blocked:
+event_type	severity	identifier
+login_failed	warning	customer.a@lumeegy.test
+login_failed	warning	customer.a@lumeegy.test
+login_failed	warning	customer.a@lumeegy.test
+login_failed	warning	customer.a@lumeegy.test
+login_failed	warning	customer.a@lumeegy.test
+login_locked	critical	customer.a@lumeegy.test
+
+
+2) admin POST without csrf token -> HTTP 403
+
+event_type	severity	user_id	path	details
+csrf_rejected	warning	1	/admin/shipping.php	{"method":"POST"}
+
+
+3) customer B opened /admin/orders.php -> ended at http://localhost:8000/admin/login.php
+
+event_type	severity	user_id	path	details
+access_denied	warning	3	/admin/orders.php	non-admin requested an admin page
+
+
+4) rows containing a wrong password, "WrongPassw0rd", or long hex tokens:
+
+bad
+0
+
+
+5a) filter login_failed/warning -> rows: 5
+
+5b) page 2 rows: 22 | pagination text: ← Prev 1 2
+
+5c) XSS filter value: input shows text = "<script>alert(1)</script>", script elements injected = 0

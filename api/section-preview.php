@@ -27,6 +27,7 @@ lume_session_start();
 
 $user = current_user();
 if (!$user || ($user['role'] ?? '') !== 'admin') {
+    if ($user) security_log('access_denied', 'warning', ['user_id' => (int)$user['id'], 'details' => 'non-admin called an admin API']);
     http_response_code(403);
     exit('Unauthorized');
 }
