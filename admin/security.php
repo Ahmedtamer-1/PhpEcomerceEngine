@@ -58,8 +58,11 @@ $offset = ($page - 1) * $perPage;
 
 $st = db()->prepare("SELECT e.*, u.email AS user_email
                      FROM security_events e LEFT JOIN users u ON u.id = e.user_id
-                     $whereSql ORDER BY e.created_at DESC, e.id DESC LIMIT $perPage OFFSET $offset");
-$st->execute($params);
+                     $whereSql ORDER BY e.created_at DESC, e.id DESC LIMIT ? OFFSET ?");
+foreach ($params as $i => $v) $st->bindValue($i + 1, $v);
+$st->bindValue(count($params) + 1, $perPage, PDO::PARAM_INT);
+$st->bindValue(count($params) + 2, $offset, PDO::PARAM_INT);
+$st->execute();
 $events = $st->fetchAll();
 
 // Query string for pagination links (only whitelisted filters).
