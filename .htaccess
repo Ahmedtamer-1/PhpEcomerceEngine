@@ -35,6 +35,11 @@ Require all denied
 # Disable directory listing
 Options -Indexes
 
+# Custom error pages (no server details, no stack traces)
+ErrorDocument 403 /403.php
+ErrorDocument 404 /404.php
+ErrorDocument 500 /500.php
+
 # Disable server signature
 ServerSignature Off
 
