@@ -40,6 +40,9 @@ function password_reset_request(string $email): void
     $stmt = db()->prepare('SELECT id, first_name, email FROM users WHERE email = ?');
     $stmt->execute([trim($email)]);
     $user = $stmt->fetch();
+    // Logged even for unknown emails (the identifier is what was typed), so
+    // reset-form probing shows up; the user still gets the same answer.
+    security_log('password_reset_requested', 'info', ['identifier' => trim($email), 'user_id' => $user ? (int)$user['id'] : null, 'details' => $user ? 'account found' : 'no such account']);
     if (!$user) return;
 
     password_reset_ensure_table();
@@ -91,5 +94,6 @@ function password_reset_complete(string $token, string $newPassword): ?int
         ->execute([password_hash($newPassword, PASSWORD_BCRYPT), $userId]);
     db()->prepare('DELETE FROM password_resets WHERE user_id = ?')->execute([$userId]);
     remember_forget_user($userId);
+    security_log('password_reset_completed', 'info', ['user_id' => $userId]);
     return $userId;
 }
