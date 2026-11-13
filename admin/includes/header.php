@@ -167,6 +167,10 @@ $totalNotifs = $unreadMessages + $pendingOrders;
                 <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                 <span>Activity Log</span>
             </a>
+            <a href="<?= SITE_URL ?>/admin/security.php" class="admin-nav-link <?= $adminPage === 'security' ? 'active' : '' ?>">
+                <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <span>Security Events</span>
+            </a>
 
         </nav>
         <div class="admin-sidebar__bottom">
