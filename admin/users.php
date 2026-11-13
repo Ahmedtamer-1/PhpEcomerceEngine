@@ -46,6 +46,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_action']) && !em
     }
 }
 
+// ── UNLOCK a locked-out account (clears its login throttle counters) ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['unlock_user_id'])) {
+    $uid = (int) $_POST['unlock_user_id'];
+    $st = db()->prepare('SELECT email FROM users WHERE id = ?');
+    $st->execute([$uid]);
+    $lockedEmail = $st->fetchColumn();
+    if ($lockedEmail === false) {
+        $error = 'User not found.';
+    } else {
+        $cleared = login_unlock((string)$lockedEmail);
+        log_activity('unlock_account', 'user', $uid, "Cleared $cleared login attempt record(s)");
+        security_log('account_unlocked', 'warning', ['user_id' => (int)$adminUser['id'], 'identifier' => (string)$lockedEmail, 'details' => ['target_user_id' => $uid, 'records_cleared' => $cleared]]);
+        header('Location: ' . SITE_URL . '/admin/users.php?id=' . $uid . '&msg=unlocked');
+        exit;
+    }
+}
+
 // ── UPDATE ROLE ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['user_id'], $_POST['role'])) {
     $uid  = (int) $_POST['user_id'];
@@ -57,6 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['user_id'], $_POST['ro
     } else {
         db()->prepare('UPDATE users SET role = ? WHERE id = ?')->execute([$role, $uid]);
         log_activity('update_user_role', 'user', $uid, "Role: $role");
+        security_log('role_changed', 'critical', ['user_id' => (int)$adminUser['id'], 'details' => ['target_user_id' => $uid, 'new_role' => $role]]);
         header('Location: ' . SITE_URL . '/admin/users.php?msg=updated');
         exit;
     }
@@ -64,7 +82,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['user_id'], $_POST['ro
 
 if (isset($_GET['msg'])) {
     $msgs = [
-        'updated' => 'User updated!', 
+        'updated' => 'User updated!',
+        'unlocked' => 'Sign-in lock cleared.',
         'deleted' => 'User deleted.',
         'bulk_deleted' => 'Selected users were deleted.'
     ];
@@ -137,6 +156,20 @@ if (isset($_GET['id']) && $action !== 'delete') {
                         <option value="admin" <?= $viewUser['role'] === 'admin' ? 'selected' : '' ?>>Admin</option>
                     </select>
                     <button type="submit" class="admin-btn admin-btn--primary admin-btn--sm">Save</button>
+                </form>
+            </div>
+
+            <?php
+                $failedNow = db()->prepare("SELECT COUNT(*) FROM login_attempts WHERE identifier = ? AND attempted_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)");
+                $failedNow->execute([strtolower($viewUser['email'])]);
+                $failedCount = (int)$failedNow->fetchColumn();
+            ?>
+            <div style="background:var(--a-surface);border:1px solid var(--a-border);border-radius:var(--a-radius);padding:24px;margin-bottom:16px">
+                <h3 style="font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;color:var(--a-gold)">Sign-in Lock</h3>
+                <p style="font-size:.82rem;color:var(--a-muted);margin-bottom:12px">Failed sign-ins in the last 15 minutes: <strong><?= $failedCount ?></strong>. Clears the counters so the owner can try again now.</p>
+                <form method="post">
+                    <input type="hidden" name="unlock_user_id" value="<?= (int)$viewUser['id'] ?>">
+                    <button type="submit" class="admin-btn admin-btn--sm admin-btn--full">Unlock account</button>
                 </form>
             </div>
 

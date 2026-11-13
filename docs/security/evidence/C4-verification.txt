@@ -1,0 +1,32 @@
+--- 5 wrong passwords from ::1 (response time per attempt) ---
+attempt 1:  1128 ms  "Invalid email or password."
+attempt 2:   285 ms  "Invalid email or password."
+attempt 3:   826 ms  "Invalid email or password."
+attempt 4:  1382 ms  "Invalid email or password."
+attempt 5:  1906 ms  "Invalid email or password."
+6th attempt with the RIGHT password: "Too many attempts. Try again in 15 minutes."  (url http://localhost:8090/account.php)
+unknown email (not locked yet, other key): "Invalid email or password."
+--- no user enumeration ---
+known email, wrong password : "Invalid email or password."
+unknown email, wrong password: "Invalid email or password."  same text: true
+--- same account from another address (127.0.0.1) ---
+login from 127.0.0.1 with the right password -> HTTP 302 (302 = signed in, redirect to the account page)
+--- security_events so far ---
+event_type	severity	identifier	details
+login_failed	warning	customer.a@lumeegy.test	NULL
+login_failed	warning	customer.a@lumeegy.test	NULL
+login_failed	warning	customer.a@lumeegy.test	NULL
+login_failed	warning	customer.a@lumeegy.test	NULL
+login_failed	warning	customer.a@lumeegy.test	NULL
+login_locked	critical	customer.a@lumeegy.test	limit of 5 reached for this email from this address
+login_success	info	customer.a@lumeegy.test	NULL
+
+--- admin unlock ---
+after Unlock: Sign-in lock cleared.
+::1 right password after unlock -> http://localhost:8090/account.php  (signed in: true)
+event_type	severity	user_id	identifier	details
+account_unlocked	warning	1	customer.a@lumeegy.test	{"target_user_id":2,"records_cleared":5}
+
+action	details
+unlock_account	Cleared 5 login attempt record(s)
+

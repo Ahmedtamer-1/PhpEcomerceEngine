@@ -1,0 +1,15 @@
+--- registration, raw POST (browser minlength bypassed) ---
+register  "password"                         -> REJECTED: Choose a stronger password. Use at least 10 characters. Add an uppercase letter (or use a passphrase of 16+ characters). Add a number (or use a passphrase of 16+ characters).
+register  "Password1"                        -> REJECTED: Choose a stronger password. Use at least 10 characters.
+register  "aaaaaaaaaa"                       -> REJECTED: Choose a stronger password. Add an uppercase letter (or use a passphrase of 16+ characters). Add a number (or use a passphrase of 16+ characters). Do not repeat a single character. This password is too common.
+register  "u4@pp.lumeegy.test"               -> REJECTED: Choose a stronger password. Do not include your email address in the password.
+register  "u5Lumeegy"                        -> REJECTED: Choose a stronger password. Use at least 10 characters.
+register  "Lumeegy2026"                      -> REJECTED: Choose a stronger password. This password is too common.
+register  "Annabel-Str0ng-1"                 -> REJECTED: Choose a stronger password. Do not include your name in the password.
+register  "Correct-Horse-7-Battery"          -> ACCEPTED (account created)
+register  "a long passphrase for lumeegy"    -> ACCEPTED (account created)
+--- password reset ---
+reset     "password123"                      -> REJECTED: Choose a stronger password. Add an uppercase letter (or use a passphrase of 16+ characters). This password is too common.
+reset     "u8@pp.lumeegy.test"               -> REJECTED: Choose a stronger password. Do not include your email address in the password.
+reset     "Maple-Stream-Quiet-9!"            -> ACCEPTED
+real form with strong password -> http://localhost:8000/account.php

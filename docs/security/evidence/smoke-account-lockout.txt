@@ -1,0 +1,20 @@
+--- smoke test (account-lockout) against http://localhost:8090, branch: feat/account-lockout ---
+GET / -> 200
+GET /shop.php -> 200
+GET /product.php?slug=test-ring-classic -> 200
+GET /cart.php -> 200
+GET /account.php -> 200
+checkout result url: http://localhost:8090/checkout.php?success=1
+orders before/after: 2 -> 3; new order id 3, status pending
+product 1 stock: 10 -> 9 (expected 9): OK
+admin sees the order page: true
+admin sets status "cancelled" -> order status cancelled, stock 10 (expected 10): OK
+csrf len 64, HTTP 302, body: 
+S2 manual order via admin/order-new.php: HTTP 302, order status "paid" (expected paid), product 3 stock 5 -> 4
+S2 InstaPay checkout: http://localhost:8090/checkout.php?success=1 -> order status "pending_payment" (expected pending_payment)
+admin/abandoned.php?show=open -> 200
+admin/abandoned.php?show=contacted -> 200
+admin/abandoned.php?show=dismissed -> 200
+admin/abandoned.php?show=ordered -> 200
+admin/abandoned.php?show=all -> 200
+admin/abandoned.php?show=x' OR '1'='1 -> 200

@@ -27,7 +27,7 @@ $totalNotifs = $unreadMessages + $pendingOrders;
     <meta name="csrf-token" content="<?= h(csrf_token()) ?>">
     <?php require __DIR__ . '/csrf-script.php'; ?>
     <?php if (in_array($adminPage, ['dashboard', 'analytics', 'demand'], true)): /* only these pages draw charts */ ?>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js" defer integrity="sha256-dEAdc43T4D7l37O2hBIQ/ixOrYqWDEARykugt4qf2PM=" crossorigin="anonymous"></script>
     <?php endif; ?>
     <?php /* Versioned by file mtime: time() made every page view re-download the CSS. */ ?>
     <link rel="stylesheet" href="<?= SITE_URL ?>/admin/assets/css/admin.css?v=<?= filemtime(__DIR__ . '/../assets/css/admin.css') ?>">
@@ -166,6 +166,10 @@ $totalNotifs = $unreadMessages + $pendingOrders;
             <a href="<?= SITE_URL ?>/admin/activity.php" class="admin-nav-link <?= $adminPage === 'activity' ? 'active' : '' ?>">
                 <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                 <span>Activity Log</span>
+            </a>
+            <a href="<?= SITE_URL ?>/admin/security.php" class="admin-nav-link <?= $adminPage === 'security' ? 'active' : '' ?>">
+                <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <span>Security Events</span>
             </a>
 
         </nav>

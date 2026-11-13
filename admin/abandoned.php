@@ -41,9 +41,11 @@ $valid = ['open', 'contacted', 'dismissed', 'ordered', 'all'];
 if (!in_array($show, $valid, true)) $show = 'open';
 
 // Rows still being typed into right now aren't "abandoned" yet.
-$where = $show === 'all' ? '1=1' : 'status = ' . db()->quote($show);
+$where = $show === 'all' ? '1=1' : 'status = ?';
 if ($show === 'open') $where .= ' AND updated_at < (NOW() - INTERVAL 30 MINUTE)';
-$leads = db()->query("SELECT * FROM checkout_leads WHERE $where ORDER BY updated_at DESC LIMIT 300")->fetchAll();
+$leadsStmt = db()->prepare("SELECT * FROM checkout_leads WHERE $where ORDER BY updated_at DESC LIMIT 300");
+$leadsStmt->execute($show === 'all' ? [] : [$show]);
+$leads = $leadsStmt->fetchAll();
 
 $counts = [];
 foreach (db()->query("SELECT status, COUNT(*) c FROM checkout_leads GROUP BY status") as $r) $counts[$r['status']] = (int)$r['c'];

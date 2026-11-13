@@ -1,0 +1,4 @@
+--- ENV=production, wrong DB_PASS ---
+HTML  /shop.php -> HTTP 500; page text: "Something went wrong — LUMEEGY 500 Something went wrong We could not complete your request. Please try again in a moment. Back to LUMEEGY Reference: 492644b2"
+log line for 492644b2: [Fri Nov 13 19:33:38 2026] [ref 492644b2] database connection: PDOException: SQLSTATE[HY000] [1045] Access denied for user 'lumeegy'@'localhost' (using password: YES)
+JSON  /api/cart.php -> HTTP 500 application/json; charset=utf-8: {"success":false,"message":"Something went wrong","ref":"dbbfafe6"}

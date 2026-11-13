@@ -19,7 +19,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !csrf_verify($_POST['csrf'] ?? ''))
 
     // Rate limiting
     if (login_throttled($email)) {
-        $error = 'Too many login attempts. Please wait 15 minutes.';
+        // The lock itself is logged once, in login_failed(), when the limit is reached.
+        $error = login_lockout_message($email);
     } else {
         $stmt = db()->prepare('SELECT id, password_hash, role FROM users WHERE email = ?');
         $stmt->execute([$email]);
@@ -27,15 +28,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !csrf_verify($_POST['csrf'] ?? ''))
 
         if ($row && password_verify($pass, $row['password_hash'])) {
             if ($row['role'] !== 'admin') {
+                security_log('access_denied', 'warning', ['user_id' => (int)$row['id'], 'identifier' => $email, 'details' => 'non-admin account used the admin login']);
                 $error = 'This account does not have admin access.';
             } else {
                 login_succeeded($email);
                 login_user((int)$row['id'], !empty($_POST['remember']));
+                security_log('login_success', 'info', ['user_id' => (int)$row['id'], 'identifier' => $email, 'details' => 'admin login']);
                 log_activity('admin_login', 'user', (int)$row['id']);
                 header('Location: ' . SITE_URL . '/admin/');
                 exit;
             }
         } else {
+            // Log first: login_failed() may log the lock and then sleeps.
+            security_log('login_failed', 'warning', ['identifier' => $email, 'details' => 'admin login']);
             login_failed($email);
             $error = 'Invalid email or password.';
         }

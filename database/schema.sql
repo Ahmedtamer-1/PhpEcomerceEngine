@@ -68,6 +68,25 @@ CREATE TABLE IF NOT EXISTS activity_log (
     KEY user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Security events (failed logins, lockouts, CSRF rejections, access denied...)
+-- shown in Admin → Security Events. Created on first use as well.
+CREATE TABLE IF NOT EXISTS security_events (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    event_type VARCHAR(40) NOT NULL,
+    severity VARCHAR(10) NOT NULL DEFAULT 'info',
+    user_id INT UNSIGNED NULL,
+    identifier VARCHAR(190) NULL,
+    ip_address VARCHAR(45) NOT NULL DEFAULT '',
+    user_agent VARCHAR(255) NULL,
+    path VARCHAR(255) NOT NULL DEFAULT '',
+    details TEXT NULL,
+    created_at DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    KEY created_at (created_at),
+    KEY type_time (event_type, created_at),
+    KEY ip_time (ip_address, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ── Catalogue ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS categories (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,

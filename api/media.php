@@ -9,6 +9,7 @@ lume_session_start();
 // Auth check — admin only
 $user = current_user();
 if (!$user || ($user['role'] ?? '') !== 'admin') {
+    if ($user) security_log('access_denied', 'warning', ['user_id' => (int)$user['id'], 'details' => 'non-admin called an admin API']);
     json_response(['success' => false, 'message' => 'Unauthorized'], 403);
 }
 admin_enforce_csrf();

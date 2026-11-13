@@ -28,10 +28,10 @@ function db(): PDO {
         // the dashboard started at 2–3am and late orders landed on the next day.
         $pdo->exec("SET time_zone = '" . date('P') . "'");
     } catch (PDOException $e) {
-        if (ENV === 'development') {
-            die('<pre style="color:red">DB Error: ' . $e->getMessage() . '</pre>');
-        }
-        die('A database error occurred. Please try again later.');
+        // Same page and reference ID as every other failure; the real error
+        // (which can include the DB host and user) only goes to the log.
+        lume_fail('PDOException: ' . $e->getMessage(), 'database connection');
+        exit;
     }
 
     return $pdo;

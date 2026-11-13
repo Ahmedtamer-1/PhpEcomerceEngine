@@ -16,7 +16,7 @@ try {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 } catch (Exception $e) {
-    die("Database error during migration: " . $e->getMessage());
+    die(lume_error_message($e, 'The theme tables could not be prepared'));
 }
 
 $pageTitle = 'Theme Manager';
@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } catch (Exception $e) {
-        $error = "Error: " . $e->getMessage();
+        $error = lume_error_message($e, 'The theme action failed');
     }
 }
 

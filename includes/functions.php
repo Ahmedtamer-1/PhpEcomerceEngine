@@ -6,6 +6,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/meta-capi.php';
 require_once __DIR__ . '/analytics.php';
 require_once __DIR__ . '/media-video.php';
+require_once __DIR__ . '/security-log.php';
 
 // ════════════════════════════════════════════════════════
 // SESSION
@@ -14,6 +15,16 @@ function lume_session_start(): void
 {
     if (session_status() === PHP_SESSION_NONE) {
         session_name(SESSION_NAME);
+        // Strict mode: PHP refuses a session ID it never issued and starts a new
+        // one, so an attacker can't plant a chosen ID in a victim's browser
+        // (session fixation). Cookies only: no session IDs in URLs.
+        ini_set('session.use_strict_mode', '1');
+        ini_set('session.use_only_cookies', '1');
+        // Admin sessions are issued from /admin/ (the admin login) with
+        // SameSite=Strict, so another site can never trigger an admin request
+        // with the cookie. The storefront stays Lax: Strict would drop the
+        // customer's session when they return from Google or Paymob.
+        $reqPath = (string)parse_url((string)($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
         session_set_cookie_params([
             'lifetime' => 0,
             'path' => '/',
@@ -23,7 +34,7 @@ function lume_session_start(): void
                         || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'
                         || (int)($_SERVER['SERVER_PORT'] ?? 0) === 443,
             'httponly' => true,
-            'samesite' => 'Lax',
+            'samesite' => str_contains($reqPath, '/admin/') ? 'Strict' : 'Lax',
         ]);
         session_start();
         // Signed out because the session expired (closing the browser, or the
@@ -160,7 +171,13 @@ function csrf_token(): string
 function csrf_verify(string $token): bool
 {
     $expected = $_SESSION[CSRF_TOKEN_NAME] ?? '';
-    return $expected !== '' && hash_equals($expected, $token);
+    $ok = $expected !== '' && hash_equals($expected, $token);
+    // Every rejection is logged here (storefront forms, APIs and the admin
+    // guard all go through this one function). The token itself is never logged.
+    if (!$ok) {
+        security_log('csrf_rejected', 'warning', ['details' => ['method' => $_SERVER['REQUEST_METHOD'] ?? '']]);
+    }
+    return $ok;
 }
 
 /**
@@ -273,9 +290,85 @@ function login_throttled(string $email): bool
     return false;
 }
 
+/** Attempts counted against a throttle key in the current window. */
+function login_attempt_count(string $key, int $windowSeconds = 900): int
+{
+    $st = db()->prepare('SELECT COUNT(*) FROM login_attempts WHERE identifier = ? AND attempted_at > DATE_SUB(NOW(), INTERVAL ? SECOND)');
+    $st->execute([$key, $windowSeconds]);
+    return (int)$st->fetchColumn();
+}
+
+/**
+ * Seconds until the lock on this email (from this address) lifts, 0 if it is
+ * not locked. A key is locked when it holds `max` attempts in the window; it
+ * opens again when enough of the oldest ones age out.
+ */
+function login_lockout_remaining(string $email, int $windowSeconds = 900): int
+{
+    $remaining = 0;
+    foreach (login_throttle_keys($email) as [$key, $max]) {
+        $st = db()->prepare(
+            'SELECT TIMESTAMPDIFF(SECOND, NOW(), DATE_ADD(attempted_at, INTERVAL ? SECOND))
+             FROM login_attempts WHERE identifier = ? AND attempted_at > DATE_SUB(NOW(), INTERVAL ? SECOND)
+             ORDER BY attempted_at ASC, id ASC'
+        );
+        $st->execute([$windowSeconds, $key, $windowSeconds]);
+        $secs = $st->fetchAll(PDO::FETCH_COLUMN);
+        if (count($secs) >= $max) $remaining = max($remaining, (int)$secs[count($secs) - $max]);
+    }
+    return max(0, $remaining);
+}
+
+/** The text shown on the login pages when throttled: how long to wait, not a fixed number. */
+function login_lockout_message(string $email): string
+{
+    $secs = login_lockout_remaining($email);
+    if ($secs <= 0) return 'Too many attempts. Please try again shortly.';
+    $mins = (int)ceil($secs / 60);
+    return 'Too many attempts. Try again in ' . $mins . ' minute' . ($mins === 1 ? '' : 's') . '.';
+}
+
+/**
+ * Record a failed login. Also:
+ *  - logs `login_locked` the first time a key reaches its limit (not on every
+ *    blocked request, so the log is not flooded);
+ *  - slows the answer down after the 3rd failure for the same email+address:
+ *    0.5 s x (failures - 2), at most 3 s, which makes brute force slower still.
+ */
 function login_failed(string $email): void
 {
-    foreach (login_throttle_keys($email) as [$key]) record_login_attempt($key, false);
+    $scopes = ['this email from this address', 'this address (many accounts)', 'this account (many addresses)'];
+    $delayUs = 0;
+    foreach (login_throttle_keys($email) as $i => [$key, $max]) {
+        record_login_attempt($key, false);
+        $n = login_attempt_count($key);
+        if ($n === $max) {
+            security_log('login_locked', 'critical', ['identifier' => strtolower(trim($email)), 'details' => 'limit of ' . $max . ' reached for ' . $scopes[$i]]);
+        }
+        if ($i === 0 && $n >= 3) $delayUs = min(3000000, 500000 * ($n - 2));
+    }
+    if ($delayUs > 0) usleep($delayUs);
+}
+
+/**
+ * Admin unlock: clear the email's throttle counters, including the email+address
+ * ones for every address seen in the last day. The address-wide counter is left alone
+ * (it protects against password spraying). Returns the rows removed.
+ */
+function login_unlock(string $email): int
+{
+    $email = strtolower(trim($email));
+    $removed = 0;
+    // The email+address key is a hash, so it can't be looked up by email alone;
+    // try it for every address that has recent attempts on record.
+    $ips = db()->query('SELECT DISTINCT ip_address FROM login_attempts WHERE attempted_at > DATE_SUB(NOW(), INTERVAL 1 DAY)');
+    $del = db()->prepare('DELETE FROM login_attempts WHERE identifier = ?');
+    foreach ($ips->fetchAll(PDO::FETCH_COLUMN) as $ip) {
+        $del->execute(['ipe:' . sha1($email . '|' . $ip)]);
+        $removed += $del->rowCount();
+    }
+    $del->execute([$email]);
+    return $removed + $del->rowCount();
 }
 
 function login_succeeded(string $email): void
@@ -320,6 +413,58 @@ function verify_nonce(string $nonce, string $action, int $ttlHours = 24): bool
     // Check previous window
     $prev = hash_hmac('sha256', $action . '|' . ($tick - 1), csrf_token());
     return hash_equals($prev, $nonce);
+}
+
+// ════════════════════════════════════════════════════════
+// PASSWORD POLICY
+// ════════════════════════════════════════════════════════
+/**
+ * Problems with a new password, as a list of readable sentences (empty = OK).
+ * Used wherever a password is set (register, reset). The browser's minlength is
+ * only a convenience; this server-side check is the control.
+ *   - 10 to 128 characters
+ *   - lowercase + uppercase + digit, unless it is a 16+ character passphrase
+ *   - not a single repeated character, not in includes/common-passwords.txt
+ *   - does not contain the email's local part or the first name (3+ characters)
+ */
+function password_policy_errors(string $password, string $email = '', string $name = ''): array
+{
+    $errors = [];
+    $len = mb_strlen($password);
+    if ($len < 10)  $errors[] = 'Use at least 10 characters.';
+    if ($len > 128) $errors[] = 'Use at most 128 characters.';
+
+    if ($len < 16) {
+        if (!preg_match('/\p{Ll}/u', $password)) $errors[] = 'Add a lowercase letter (or use a passphrase of 16+ characters).';
+        if (!preg_match('/\p{Lu}/u', $password)) $errors[] = 'Add an uppercase letter (or use a passphrase of 16+ characters).';
+        if (!preg_match('/\d/', $password))      $errors[] = 'Add a number (or use a passphrase of 16+ characters).';
+    }
+
+    if ($len > 1 && preg_match('/^(.)\1+$/us', $password)) {
+        $errors[] = 'Do not repeat a single character.';
+    }
+
+    // Common passwords, compared in lowercase. The list is loaded once per request.
+    static $common = null;
+    if ($common === null) {
+        $common = [];
+        $file = __DIR__ . '/common-passwords.txt';
+        foreach (is_readable($file) ? file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) : [] as $line) {
+            if ($line !== '' && $line[0] !== '#') $common[trim($line)] = true;
+        }
+    }
+    $lower = mb_strtolower($password);
+    if (isset($common[$lower])) $errors[] = 'This password is too common.';
+
+    $email = mb_strtolower(trim($email));
+    $local = $email !== '' ? (string)strstr($email, '@', true) : '';
+    if (($email !== '' && str_contains($lower, $email)) || (mb_strlen($local) >= 3 && str_contains($lower, $local))) {
+        $errors[] = 'Do not include your email address in the password.';
+    }
+    $first = mb_strtolower(trim(strtok(trim($name), ' ') ?: ''));
+    if (mb_strlen($first) >= 3 && str_contains($lower, $first)) $errors[] = 'Do not include your name in the password.';
+
+    return $errors;
 }
 
 // ════════════════════════════════════════════════════════
@@ -383,6 +528,7 @@ function cart_merge_guest(int $userId): void
 function logout_user(): void
 {
     lume_session_start();
+    if (!empty($_SESSION['user_id'])) security_log('logout', 'info', ['user_id' => (int)$_SESSION['user_id']]);
     remember_forget();
     $_SESSION = [];
     if (ini_get('session.use_cookies')) {
@@ -1269,26 +1415,110 @@ function optimize_image_in_place(string $filepath, int $maxWidth = 1600, int $qu
     return $success;
 }
 
+// ── Shared upload check (every image upload handler goes through this) ──
+const UPLOAD_MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8 MB per image, before optimisation
+
+/** A random file name; the extension always comes from the detected type. */
+function upload_random_name(string $prefix, string $ext): string
+{
+    return $prefix . '_' . bin2hex(random_bytes(16)) . '.' . $ext;
+}
+
+/**
+ * SVG is XML that can carry script. Accept it only if it parses without a
+ * DOCTYPE/entities and has no script-capable elements, event attributes or
+ * external/script links. (assets/.htaccess also sends a no-script CSP for files
+ * served from assets/, as a second layer.)
+ */
+function upload_svg_is_safe(string $svg): bool
+{
+    if (stripos($svg, '<!DOCTYPE') !== false || stripos($svg, '<!ENTITY') !== false) return false;
+    $prev = libxml_use_internal_errors(true);
+    $dom = new DOMDocument();
+    $ok = $dom->loadXML($svg, LIBXML_NONET);
+    libxml_clear_errors();
+    libxml_use_internal_errors($prev);
+    if (!$ok || !$dom->documentElement || strtolower($dom->documentElement->localName) !== 'svg') return false;
+    $bad = ['script', 'foreignobject', 'iframe', 'embed', 'object', 'animate', 'set', 'handler', 'listener'];
+    foreach ($dom->getElementsByTagName('*') as $el) {
+        if (in_array(strtolower($el->localName), $bad, true)) return false;
+        foreach ($el->attributes as $attr) {
+            $name = strtolower($attr->name);
+            $val  = strtolower(trim($attr->value));
+            if (str_starts_with($name, 'on')) return false;
+            if (preg_match('/^\s*(javascript|data|vbscript):/i', $val)) return false;
+            if (in_array($name, ['href', 'src'], true) && !str_starts_with($val, '#')) return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Check an image on disk. Returns ['ok' => true, 'mime', 'ext'] or
+ * ['ok' => false, 'error'] and logs `upload_rejected`. Rules: size limit, real
+ * type from the file's bytes (finfo) against a whitelist, no script-like file
+ * name (shell.php, shell.php.jpg, ../x), no embedded <?php / <script, a valid
+ * image (getimagesize), SVG only if sanitised.
+ * Options: allow (mime => ext), allow_svg, max_bytes, user_id.
+ */
+function upload_check_image_path(string $path, string $clientName, array $opts = []): array
+{
+    $allow = $opts['allow'] ?? ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
+    if (!empty($opts['allow_svg'])) $allow['image/svg+xml'] = 'svg';
+    $max = (int)($opts['max_bytes'] ?? UPLOAD_MAX_IMAGE_BYTES);
+
+    $reject = function (string $reason, string $msg) use ($clientName, $opts, $path): array {
+        security_log('upload_rejected', 'warning', ['user_id' => $opts['user_id'] ?? null, 'details' => [
+            'reason' => $reason, 'client_name' => $clientName, 'size' => is_file($path) ? filesize($path) : 0,
+        ]]);
+        return ['ok' => false, 'error' => $msg];
+    };
+
+    if (!is_file($path)) return $reject('no file', 'No file received.');
+    if (filesize($path) > $max) return $reject('too large', 'The file is too large (max ' . round($max / 1048576) . ' MB).');
+    if (preg_match('#[\\\\/\x00]|\.\.#', $clientName)) return $reject('bad file name', 'Invalid file name.');
+    if (preg_match('/\.(php\d?|phtml|phar|pht|phps|shtml|cgi|pl|asp|aspx|jsp|exe|sh|bat)(\.|$)/i', $clientName)) {
+        return $reject('script extension in name', 'This file name is not allowed.');
+    }
+
+    $mime = (new finfo(FILEINFO_MIME_TYPE))->file($path) ?: '';
+    if (!isset($allow[$mime])) return $reject('type not allowed: ' . $mime, 'This file type is not allowed.');
+
+    $data = (string)file_get_contents($path);
+    if ($mime === 'image/svg+xml') {
+        if (!upload_svg_is_safe($data)) return $reject('unsafe svg', 'This SVG contains active content and was rejected.');
+    } else {
+        if (preg_match('/<\?php|<script/i', $data)) return $reject('embedded code', 'The file contains code and was rejected.');
+        if (@getimagesize($path) === false) return $reject('not a valid image', 'The file is not a valid image.');
+    }
+    return ['ok' => true, 'mime' => $mime, 'ext' => $allow[$mime]];
+}
+
+/** Same check for a $_FILES entry: also requires that PHP received it as an upload. */
+function upload_check_image(array $file, array $opts = []): array
+{
+    $name = (string)($file['name'] ?? '');
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        security_log('upload_rejected', 'warning', ['user_id' => $opts['user_id'] ?? null, 'details' => ['reason' => 'upload error ' . (int)($file['error'] ?? -1), 'client_name' => $name]]);
+        return ['ok' => false, 'error' => 'The upload failed.'];
+    }
+    if (!is_uploaded_file((string)($file['tmp_name'] ?? ''))) {
+        security_log('upload_rejected', 'warning', ['user_id' => $opts['user_id'] ?? null, 'details' => ['reason' => 'not an uploaded file', 'client_name' => $name]]);
+        return ['ok' => false, 'error' => 'The upload failed.'];
+    }
+    return upload_check_image_path((string)$file['tmp_name'], $name, $opts);
+}
+
 function media_upload(array $file, ?int $userId = null): ?array
 {
     if ($file['error'] !== UPLOAD_ERR_OK)
         return null;
 
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
-    $mime = $finfo->file($file['tmp_name']);
-    $allowedMimes = [
-        'image/jpeg' => 'jpg',
-        'image/png' => 'png',
-        'image/webp' => 'webp',
-        'image/gif' => 'gif',
-        'image/svg+xml' => 'svg'
-    ];
+    $chk = upload_check_image($file, ['allow_svg' => true, 'user_id' => $userId]);
+    if (!$chk['ok']) return null;
 
-    if (!array_key_exists($mime, $allowedMimes))
-        return null;
-
-    $ext = $allowedMimes[$mime];
-    $newName = 'media_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+    $ext = $chk['ext'];
+    $newName = upload_random_name('media', $ext);
     $dest = UPLOADS_PATH . '/' . $newName;
     $filepath = 'assets/images/products/' . $newName; // Keep relative for DB storage
 

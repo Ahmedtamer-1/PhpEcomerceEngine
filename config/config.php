@@ -6,6 +6,10 @@
  * NEVER commit real API keys to version control.
  */
 
+// Error handling first, so anything that fails below (including reading .env
+// or connecting to the database) is logged with a reference ID and never shown.
+require_once dirname(__DIR__) . '/includes/error-handler.php';
+
 // ── Environment ──────────────────────────────────────────────
 $envFile = dirname(__DIR__) . '/.env';
 if (file_exists($envFile)) {
@@ -108,8 +112,10 @@ if (ENV === 'development') {
     ini_set('display_errors', 1);
     error_reporting(E_ALL);
 } else {
+    // Never printed; includes/error-handler.php logs warnings with their location.
     ini_set('display_errors', 0);
-    error_reporting(0);
+    ini_set('log_errors', 1);
+    error_reporting(E_ALL & ~E_DEPRECATED);
 }
 
 // ── Timezone ──────────────────────────────────────────────────

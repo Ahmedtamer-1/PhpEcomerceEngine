@@ -8,6 +8,8 @@ lume_session_start();
 
 $adminUser = current_user();
 if (!$adminUser || ($adminUser['role'] ?? '') !== 'admin') {
+    // A signed-in non-admin reaching an admin page is worth a record.
+    if ($adminUser) security_log('access_denied', 'warning', ['user_id' => (int)$adminUser['id'], 'details' => 'non-admin requested an admin page']);
     // Not logged in or not admin → redirect to admin login
     header('Location: ' . SITE_URL . '/admin/login.php');
     exit;
