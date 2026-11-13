@@ -93,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             log_activity('update_settings', 'system');
         }
     } catch (Exception $e) {
-        $error = 'Error saving settings: ' . $e->getMessage();
+        $error = lume_error_message($e, 'The settings could not be saved');
     }
 }
 

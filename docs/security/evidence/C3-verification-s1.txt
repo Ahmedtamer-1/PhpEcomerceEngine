@@ -1,0 +1,4 @@
+--- S1: admin shipping zone with a duplicate name ---
+message shown: The zone could not be added (is the name already used?). Reference: fdfa7512.
+shows SQL / table / constraint text: false
+log line for the reference: [Fri Nov 13 19:34:14 2026] [ref fdfa7512] PDOException: SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'Cairo' for key 'shipping_zones.name' in D:\Term 7\Security In Software Engineering\project\PhpEcomerceEngine\admin\shipping.php:24

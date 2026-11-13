@@ -1,0 +1,10 @@
+--- ENV=production, DB ok: uncaught exception, warning, fatal ---
+exception      HTTP 500 text/html; charset=utf-8 leaks-detail=false :: Something went wrong — LUMEEGY 500 Something went wrong We could not complete your request. Please try again in a moment. Back to LUMEEGY Reference: b95faf21
+warning        HTTP 200 text/html; charset=UTF-8 leaks-detail=false :: page-continues-after-warning
+fatal          HTTP 500 text/html; charset=utf-8 leaks-detail=false :: Something went wrong — LUMEEGY 500 Something went wrong We could not complete your request. Please try again in a moment. Back to LUMEEGY Reference: 9097c8ae
+api-exception  HTTP 500 application/json; charset=utf-8 leaks-detail=false :: {"success":false,"message":"Something went wrong","ref":"46ad5506"}
+server log:
+[Fri Nov 13 19:33:53 2026] [ref b95faf21] uncaught exception: RuntimeException: secret detail C:\inetpub\secret.sql in D:\Term 7\Security In Software Engineering\project\PhpEcomerceEngine\zz_throw.php:4
+[Fri Nov 13 19:33:53 2026] [php 2] Undefined variable $undefinedVar in D:\Term 7\Security In Software Engineering\project\PhpEcomerceEngine\zz_throw.php:5
+[Fri Nov 13 19:33:53 2026] [ref 9097c8ae] uncaught exception: Error: Call to undefined function undefined_function_xyz() in D:\Term 7\Security In Software Engineering\project\PhpEcomerceEngine\zz_throw.php:6
+[Fri Nov 13 19:33:53 2026] [ref 46ad5506] uncaught exception: RuntimeException: secret detail C:\inetpub\secret.sql in D:\Term 7\Security In Software Engineering\project\PhpEcomerceEngine\api\zz_throw.php:4
