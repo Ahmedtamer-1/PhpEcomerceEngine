@@ -21,6 +21,7 @@ All testing was performed **only on a local copy** of the site (Apache on localh
 |---|---|
 | [local-setup.md](local-setup.md) | How to run the local test copy (Apache, MySQL, seed, tools, ZAP settings) |
 | [threat-model.md](threat-model.md) | STRIDE threat model: decides what is tested first |
+| [test-plan.md](test-plan.md) | Parts 2+3: the 16 test cases (2 per category, each with a positive control), run order, and the Semgrep/ZAP "after" runs |
 | [part1-controls-spec.md](part1-controls-spec.md) | What Part 1 builds (controls C1–C4, hardening H1–H3, fixes S1–S3) and when each is done |
 | [semgrep-lumeegy.yml](semgrep-lumeegy.yml) | Custom static-analysis rules for this codebase |
 | [semgrep-triage.md](semgrep-triage.md) | Baseline Semgrep results, each marked true or false positive |
