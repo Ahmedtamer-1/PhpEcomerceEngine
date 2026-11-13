@@ -1,0 +1,2 @@
+--- ENV=development shows the detail ---
+HTTP 500; detail visible on screen: true
