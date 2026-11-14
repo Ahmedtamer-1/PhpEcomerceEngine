@@ -1,18 +1,21 @@
 // LUMEEGY Part 5: automated live-demo runner.
 //
-// Opens two visible Edge windows side by side (left: guest/customer, right: admin)
-// and plays the 8 steps of demo-script.md in them, pausing before each step so the
-// narrator can explain it. Talks to Edge over the DevTools protocol, so it needs no
-// npm package. LOCAL TEST COPY ONLY: it refuses any site other than localhost:8090.
+// Opens two visible Edge windows side by side and plays the 8 steps of demo-script.md:
+//   LEFT  = attacker / guest / customer      RIGHT = admin
+// Every action follows the same pattern, in the window where it happens:
+//   1. a yellow "NEXT" card says what the attacker will do and what we expect,
+//   2. the window gets an orange outline and an orange Continue button; nothing moves until you click it,
+//   3. the action runs in the page (typing into the real forms), then a green/red RESULT card says
+//      what happened and which control blocked it.
+// Talks to Edge over the DevTools protocol, so it needs no npm package.
+// LOCAL TEST COPY ONLY: it refuses any site other than localhost:8090 (and its own attacker page on :9000).
 //
 // Run from the repo root (PowerShell or Git Bash):
-//   node docs/security/demo-runner.mjs            pause before each step (Enter)
-//   node docs/security/demo-runner.mjs --auto     no pauses (rehearsal)
-//   node docs/security/demo-runner.mjs --burp     route the left window through Burp (127.0.0.1:8082)
-//   node docs/security/demo-runner.mjs --step 3   start at step 3 (no seed reset)
-//   node docs/security/demo-runner.mjs --speed 2  everything twice as slow (0.5 = twice as fast; default 1)
-//   node docs/security/demo-runner.mjs --keep     leave the windows open at the end
-//   node docs/security/demo-runner.mjs --shots D  save a screenshot of both windows after each step in folder D
+//   node docs/security/demo-runner.mjs --speed 0.7   the presentation pace we use
+//   --auto      no clicks needed (rehearsal)          --burp      left window goes through Burp (127.0.0.1:8082)
+//   --step 3    start at step 3 (no seed reset)       --keep      leave the windows open at the end
+//   --speed N   scale the short holds inside an action (typing speed never changes)
+//   --shots D   save a screenshot after every action in folder D (fresh fallback evidence)
 //
 // It resets the database from database/seed-security-test.sql at the start and the end.
 
@@ -30,15 +33,16 @@ const START = args.includes('--step') ? Number(args[args.indexOf('--step') + 1])
 const SPEED = args.includes('--speed') ? Number(args[args.indexOf('--speed') + 1]) || 1 : 1;
 const SHOTS = args.includes('--shots') ? resolve(args[args.indexOf('--shots') + 1]) : '';
 const SITE = 'http://localhost:8090';
+const ATTACKER = 'http://localhost:9000';
 const ROOT = resolve('.');
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const MYSQL = 'C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe';
 const ERRLOG = 'C:/Apache24/logs/lumeegy-error.log';
-const POC_DIR = join(ROOT, 'docs/security/evidence/burp');
 const REPORT = join(ROOT, 'docs/security/Vulnerability-Assessment-Report.pdf');
 const ZAP = join(ROOT, 'docs/security/evidence/zap/zap-before-summary.html');
 const fileUrl = p => 'file:///' + p.split('\\').join('/');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const beat = ms => sleep(AUTO ? Math.min(ms, 300) : ms * SPEED);
 
 if (!existsSync(join(ROOT, 'database/seed-security-test.sql'))) {
   console.error('Run this from the repository root.'); process.exit(1);
@@ -57,12 +61,27 @@ const sql = q => {
   if (r.status !== 0) throw new Error('mysql: ' + r.stderr);
   return r.stdout.trim();
 };
-const events = t => sql(`SELECT COUNT(*) FROM security_events WHERE event_type='${t}'`);
+const events = t => Number(sql(`SELECT COUNT(*) FROM security_events WHERE event_type='${t}'`));
 const reseed = () => { sql('source database/seed-security-test.sql'); };
+
+// ── Demo-only files in a temp folder: the attacker's page and the fake image ──
+const TMP = mkdtempSync(join(tmpdir(), 'lume-demo-files-'));
+// Same forged request as evidence/burp/csrf-poc.html, but with a button the presenter clicks,
+// so the audience sees the attack happen instead of an instant auto-submit.
+writeFileSync(join(TMP, 'gift.html'), `<!doctype html><html><head><meta charset="utf-8"><title>Free gift!</title></head>
+<body style="font-family:Segoe UI,Arial;background:#fff7e6;text-align:center;padding-top:150px">
+<h1 style="font-size:40px">🎁 Congratulations!</h1><p style="font-size:20px">You have won a free gift. Claim it now.</p>
+<form id="f" method="POST" action="${SITE}/api/cart.php">
+  <input type="hidden" name="action" value="add"><input type="hidden" name="product_id" value="3"><input type="hidden" name="quantity" value="5">
+  <button id="claim" style="font-size:22px;padding:14px 28px;background:#2e7d32;color:#fff;border:0;border-radius:8px;cursor:pointer">Claim your free gift</button>
+</form>
+<p style="color:#888;margin-top:40px">(attacker's site, localhost:9000 – the hidden form posts to the shop with no CSRF token)</p></body></html>`);
+const SHELL = join(TMP, 'shell.php.jpg');
+writeFileSync(SHELL, '<?php echo 1; ?>\n');
 
 // ── Minimal DevTools-protocol client for one Edge window ──
 class Win {
-  static async open(name, port, x, extra = []) {
+  static async open(name, label, port, x, extra = []) {
     const prof = mkdtempSync(join(tmpdir(), `lume-demo-${name}-`));
     const proc = spawn(EDGE, [`--remote-debugging-port=${port}`, `--user-data-dir=${prof}`, '--no-first-run',
       '--no-default-browser-check', '--disable-sync', '--disable-features=msEdgeSignin,EdgeCollections',
@@ -77,13 +96,12 @@ class Win {
     const tab = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json();
     for (const t of await (await fetch(`http://127.0.0.1:${port}/json/list`)).json())
       if (t.type === 'page' && t.id !== tab.id) await fetch(`http://127.0.0.1:${port}/json/close/${t.id}`);
-    const w = new Win(name, proc);
+    const w = new Win(name, label, proc);
     w.browserWs = ver.webSocketDebuggerUrl;
     await w.connect(tab.webSocketDebuggerUrl);
-    await w.send('Page.bringToFront');
     return w;
   }
-  constructor(name, proc) { this.name = name; this.proc = proc; this.id = 0; this.pend = new Map(); this.loads = 0; }
+  constructor(name, label, proc) { this.name = name; this.label = label; this.proc = proc; this.id = 0; this.pend = new Map(); this.loads = 0; this.top = ['', '']; }
   connect(url) {
     this.ws = new WebSocket(url);
     this.ws.onmessage = m => {
@@ -92,7 +110,7 @@ class Win {
       else if (d.method === 'Page.loadEventFired') this.loads++;
       else if (d.method === 'Page.javascriptDialogOpening') this.send('Page.handleJavaScriptDialog', { accept: true });
     };
-    return new Promise(r => this.ws.onopen = async () => { await this.send('Page.enable'); await this.send('Runtime.enable'); r(); });
+    return new Promise(r => this.ws.onopen = async () => { await this.send('Page.enable'); await this.send('Runtime.enable'); await this.send('DOM.enable'); r(); });
   }
   send(method, params = {}) {
     return new Promise(r => { const i = ++this.id; this.pend.set(i, r); this.ws.send(JSON.stringify({ id: i, method, params })); });
@@ -102,13 +120,16 @@ class Win {
     if (r.result?.exceptionDetails) throw new Error(`[${this.name}] ${r.result.exceptionDetails.exception?.description || expr}`);
     return r.result?.result?.value;
   }
+  // Overlay helpers never fail the demo (e.g. the PDF viewer page cannot take them).
+  ui(expr) { return this.js(expr).catch(() => {}); }
   async waitLoad(before, ms = 20000) {
     for (let t = 0; t < ms && this.loads <= before; t += 100) await sleep(100);
     await sleep(400);
   }
   async go(url) {
-    if (!url.startsWith(SITE) && !url.startsWith('file:') && !url.startsWith('http://localhost:9000')) throw new Error('refusing non-local URL ' + url);
+    if (![SITE, ATTACKER, 'file:'].some(p => url.startsWith(p))) throw new Error('refusing non-local URL ' + url);
     const n = this.loads; await this.send('Page.navigate', { url }); await this.waitLoad(n);
+    await this.banner(...this.top);
   }
   async type(sel, text) {
     await this.js(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});e.scrollIntoView({block:'center'});e.focus();e.value='';})()`);
@@ -117,30 +138,54 @@ class Win {
   async click(sel, nav = true) {
     const n = this.loads;
     await this.js(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});e.scrollIntoView({block:'center'});e.click();})()`);
-    if (nav) await this.waitLoad(n); else await sleep(1200);
+    if (nav) { await this.waitLoad(n); await this.banner(...this.top); } else await sleep(1200);
   }
-  text(sel) { return this.js(`(document.querySelector(${JSON.stringify(sel)})||{}).innerText||''`); }
-  // Banner at the top of the page: which step, which control.
+  // Top bar: which window this is and which step is running.
   banner(title, sub = '') {
-    return this.js(`(()=>{let b=document.getElementById('__demo');if(!b){b=document.createElement('div');b.id='__demo';
-      b.style.cssText='position:fixed;left:0;right:0;top:0;z-index:2147483647;background:#1f3a5f;color:#fff;font:600 16px Segoe UI,Arial;padding:8px 14px;box-shadow:0 2px 8px #0006';
-      document.documentElement.appendChild(b);}b.innerHTML='<div>'+${JSON.stringify(title)}+'</div><div style="font-weight:400;font-size:13px;opacity:.85">'+${JSON.stringify(sub)}+'</div>';})()`);
+    this.top = [title, sub];
+    const role = `${this.label}`;
+    return this.ui(`(()=>{let b=document.getElementById('__demo');if(!b){b=document.createElement('div');b.id='__demo';
+      b.style.cssText='position:fixed;left:0;right:0;top:0;z-index:2147483646;background:#1f3a5f;color:#fff;font:600 16px Segoe UI,Arial;padding:8px 14px;box-shadow:0 2px 8px #0006';
+      document.documentElement.appendChild(b);}
+      b.innerHTML='<span style="background:#fff;color:#1f3a5f;border-radius:4px;padding:1px 8px;margin-right:10px;font-size:13px">'+${JSON.stringify(role)}+'</span>'+${JSON.stringify(title)}
+        +'<div style="font-weight:400;font-size:13px;opacity:.85">'+${JSON.stringify(sub)}+'</div>';})()`);
   }
-  // Result box at the bottom: what the audience should notice.
-  note(text, ok = true) {
-    return this.js(`(()=>{let b=document.getElementById('__note');if(!b){b=document.createElement('div');b.id='__note';
-      b.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;color:#fff;font:600 15px Segoe UI,Arial;padding:10px 14px;border-radius:6px;white-space:pre-wrap;box-shadow:0 2px 10px #0007';
-      document.documentElement.appendChild(b);}b.style.background=${ok ? "'#1b5e20'" : "'#9b1c1c'"};b.textContent=${JSON.stringify(text)};})()`);
+  // Yellow card under the banner: what happens next (before the click) / now (after it).
+  card(kind, text) {
+    const bg = kind === 'NEXT' ? '#fff3c4' : '#e3ecf7', fg = kind === 'NEXT' ? '#5a4300' : '#1f3a5f';
+    return this.ui(`(()=>{let c=document.getElementById('__card');if(!c){c=document.createElement('div');c.id='__card';document.documentElement.appendChild(c);}
+      c.style.cssText='position:fixed;left:12px;right:12px;top:64px;z-index:2147483646;background:${bg};color:${fg};font:500 15px Segoe UI,Arial;padding:10px 14px;border-radius:6px;white-space:pre-wrap;box-shadow:0 2px 10px #0005;border-left:6px solid ${fg}';
+      c.innerHTML='<b>${kind} ▸ </b>'+${JSON.stringify(text)}.replace(/&/g,'&amp;').replace(/</g,'&lt;');})()`);
   }
-  // Big "Continue" button: the presenter clicks it when the explanation is done.
-  continueButton(next) {
-    return this.js(`(()=>{document.getElementById('__cont')?.remove();window.__demoGo=false;const b=document.createElement('button');b.id='__cont';
-      b.textContent='Continue ▶  '+${JSON.stringify(next)};b.onclick=()=>{window.__demoGo=true;b.textContent='…';};
-      b.style.cssText='position:fixed;right:16px;bottom:90px;z-index:2147483647;background:#e65100;color:#fff;border:0;border-radius:8px;font:700 16px Segoe UI,Arial;padding:12px 18px;cursor:pointer;box-shadow:0 3px 12px #0008;max-width:60%;text-align:left';
-      document.documentElement.appendChild(b);})()`);
+  // Result card at the bottom: what happened and which control did it.
+  result(text, ok = true) {
+    return this.ui(`(()=>{let b=document.getElementById('__note');if(!b){b=document.createElement('div');b.id='__note';document.documentElement.appendChild(b);}
+      b.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483646;color:#fff;font:600 15px Segoe UI,Arial;padding:10px 14px;border-radius:6px;white-space:pre-wrap;box-shadow:0 2px 10px #0007;background:${ok ? '#1b5e20' : '#9b1c1c'}';
+      b.textContent=(${ok} ? '✔ RESULT: ' : '✘ RESULT: ')+${JSON.stringify(text)};})()`);
+  }
+  clearCards() { return this.ui(`['__card','__note'].forEach(i=>document.getElementById(i)?.remove())`); }
+  // Orange outline + Continue button: only in the window where the next action will happen.
+  waitMarks(on, label = '') {
+    return this.ui(on ? `(()=>{['__cont','__frame'].forEach(i=>document.getElementById(i)?.remove());window.__demoGo=false;
+      const f=document.createElement('div');f.id='__frame';f.style.cssText='position:fixed;inset:0;border:6px solid #e65100;z-index:2147483645;pointer-events:none';document.documentElement.appendChild(f);
+      const b=document.createElement('button');b.id='__cont';b.textContent='Continue ▶  '+${JSON.stringify(label)};b.onclick=()=>{window.__demoGo=true;b.textContent='…';};
+      b.style.cssText='position:fixed;right:16px;bottom:110px;z-index:2147483647;background:#e65100;color:#fff;border:0;border-radius:8px;font:700 16px Segoe UI,Arial;padding:12px 18px;cursor:pointer;box-shadow:0 3px 12px #0008;max-width:70%;text-align:left';
+      document.documentElement.appendChild(b);})()` : `(()=>{window.__demoGo=false;['__cont','__frame'].forEach(i=>document.getElementById(i)?.remove());})()`);
   }
   async highlight(textToFind) {
-    await this.js(`(()=>{const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;while(n=w.nextNode()){if(n.nodeValue.includes(${JSON.stringify(textToFind)})){const el=n.parentElement;el.scrollIntoView({block:'center'});el.style.outline='3px solid #f9a825';el.style.background='#fff3c4';el.style.color='#000';return true;}}return false;})()`);
+    await this.ui(`(()=>{const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;while(n=w.nextNode()){if(n.nodeValue.includes(${JSON.stringify(textToFind)})){const el=n.parentElement;el.scrollIntoView({block:'center'});el.style.outline='3px solid #f9a825';el.style.background='#fff3c4';el.style.color='#000';return true;}}return false;})()`);
+  }
+  // Panel in the middle of the page (used for requests, responses and log lines).
+  panel(title, body) {
+    return this.ui(`(()=>{let p=document.getElementById('__panel');if(!p){p=document.createElement('div');p.id='__panel';document.documentElement.appendChild(p);}
+      p.style.cssText='position:fixed;left:40px;right:40px;top:200px;z-index:2147483646;background:#111827;color:#e5e7eb;font:14px Consolas,monospace;padding:14px 16px;border-radius:8px;white-space:pre-wrap;word-break:break-all;box-shadow:0 4px 16px #000a;border:2px solid #f9a825';
+      p.textContent=${JSON.stringify(title)}+'\\n\\n'+${JSON.stringify(body)};})()`);
+  }
+  clearPanel() { return this.ui(`document.getElementById('__panel')?.remove()`); }
+  async setFile(sel, path) {
+    const doc = await this.send('DOM.getDocument', { depth: -1 });
+    const q = await this.send('DOM.querySelector', { nodeId: doc.result.root.nodeId, selector: sel });
+    await this.send('DOM.setFileInputFiles', { nodeId: q.result.nodeId, files: [path] });
   }
   // Killing the launcher does not close Edge, so ask the browser itself to quit.
   async close() {
@@ -153,209 +198,288 @@ class Win {
   }
 }
 
-// ── Pacing ──
+// ── Pacing: nothing moves until the presenter clicks (or presses Enter in the terminal) ──
 const rl = createInterface({ input: process.stdin });
 const lines = []; rl.on('line', l => lines.push(l));
-// Wait until the presenter clicks the orange Continue button (either window) or presses Enter.
-async function waitClick(label) {
-  if (AUTO) { await sleep(800); return; }
-  console.log(`  Click "Continue" (${label})…`);
-  const wins = [L, R].filter(Boolean);
-  for (const w of wins) await w.continueButton(label).catch(() => {});
+async function waitClick(win, label) {
+  console.log(`  [${win.label}] click Continue: ${label}`);
+  if (AUTO) { await sleep(400); return; }
+  await win.waitMarks(true, label);
   lines.length = 0;
   for (let go = false; !go;) {
     if (lines.length) { lines.shift(); break; }
-    for (const w of wins) { try { if (await w.js('window.__demoGo === true')) go = true; } catch {} }
-    await sleep(250);
+    try { go = await win.js('window.__demoGo === true'); } catch {}
+    if (!go) await sleep(250);
   }
-  for (const w of wins) await w.js(`(()=>{window.__demoGo=false;document.getElementById('__cont')?.remove();})()`).catch(() => {});
+  await win.waitMarks(false);
 }
-async function pause(msg) {
-  console.log(`
-[1;36m▶ ${msg}[0m`);
-  await waitClick(msg);
+// One action = NEXT card → click → run → (the action shows its own RESULT card).
+async function act(win, what, fn) {
+  await win.clearCards(); await win.clearPanel();
+  await win.card('NEXT', what);
+  await waitClick(win, what.split('\n')[0]);
+  await win.card('NOW', what);
+  await fn();
+  if (SHOTS) {
+    const s = await win.send('Page.captureScreenshot', { format: 'png' });
+    if (s.result) writeFileSync(join(SHOTS, `${String(++shotN).padStart(2, '0')}-${win.name}.png`), Buffer.from(s.result.data, 'base64'));
+  }
 }
+let shotN = 0;
 const results = [];
 const check = (step, label, pass, detail) => {
   results.push({ step, label, pass, detail });
   console.log(`  ${pass ? '\x1b[32mPASS\x1b[0m' : '\x1b[31mFAIL\x1b[0m'}  ${label}  ${detail}`);
 };
-
-// Hold so the audience can read the screen (scaled by --speed; short in --auto).
-const beat = ms => sleep(AUTO ? Math.min(ms, 300) : ms * SPEED);
-// Before showing the result in the admin window: announce it, wait for Enter, count down.
-// Every switch between the two windows inside a step waits for a click.
-async function reveal(win, what) {
-  console.log(`  [33m↳ next: ${what} (${win.name} window)[0m`);
-  await waitClick(`Show → ${what}`);
-}
-const cards = w => w.js(`document.querySelectorAll('.lume-product-card').length`);
+const header = (n, title) => console.log(`\n\x1b[1;36m▶ Step ${n} · ${title}\x1b[0m`);
 
 // ── Steps ──
 async function step1(L) {
-  await pause('Step 1 · SQLI-01: SQL injection in the shop search');
-  await L.go(`${SITE}/shop.php?q=ring`); await L.banner('Step 1 · SQL injection (SQLI-01)', 'Control first: a normal search for "ring"');
-  const c = await cards(L); await L.note(`Normal search "ring": ${c} products`); await beat(5000);
+  header(1, 'SQLI-01: SQL injection in the shop search');
+  await L.banner('Step 1 · SQL injection (SQLI-01)', 'Attack the shop search box · defence: prepared statements');
+  await L.go(`${SITE}/shop.php`);
+  let c = 0, a = -1;
+  await act(L, 'Control: a normal search.\nType "ring" in the shop search box. Expected: the 2 rings.', async () => {
+    await L.click('#btn-search', false); await L.type('#lume-search-input', 'ring'); await beat(2500);
+    c = await L.js(`document.querySelectorAll('.lume-search-result').length`);
+    await L.result(`Normal search "ring" → ${c} products.`, c === 2);
+  });
   const payload = "ring' OR '1'='1' -- -";
-  await L.go(`${SITE}/shop.php?q=${encodeURIComponent(payload)}`);
-  // Server time for this request (a working SLEEP(5) injection would push this past 5000 ms).
-  const ms = Math.round(await L.js(`(e=>e.responseStart-e.requestStart)(performance.getEntriesByType('navigation')[0])`));
-  const a = await cards(L); const err = await L.js(`/SQLSTATE|syntax error|mysql/i.test(document.body.innerText)`);
-  await L.banner('Step 1 · SQL injection (SQLI-01)', `Payload: ${payload}  →  blocked by prepared statements`);
-  await L.note(`Payload returned ${a} products, SQL error shown: ${err ? 'YES' : 'no'}, server answered in ${ms} ms.\nThe input is bound as a parameter, never run as SQL.`, a === 0 && !err);
-  check(1, 'SQLI-01', c === 2 && a === 0 && !err, `control=${c} payload=${a} sqlError=${err}`);
+  await act(L, `Attack: type an SQL injection payload into the same box:\n${payload}\nIf the input became SQL, the OR '1'='1' would return EVERY product.`, async () => {
+    await L.type('#lume-search-input', payload); await beat(2500);
+    a = await L.js(`document.querySelectorAll('.lume-search-result').length`);
+    await L.result(`Payload → ${a} products ("No results found"). No extra rows, no SQL error.\nThe search text is sent to MySQL as a bound parameter (prepared statement), so it is only ever treated as text.`, a === 0);
+  });
+  let err = true, a2 = -1;
+  await act(L, 'Same payload on the full shop results page (shop.php?q=…).\nExpected: 0 products and no database error on the page.', async () => {
+    await L.go(`${SITE}/shop.php?q=${encodeURIComponent(payload)}`);
+    a2 = await L.js(`document.querySelectorAll('.lume-product-card').length`);
+    err = await L.js(`/SQLSTATE|syntax error|mysql/i.test(document.body.innerText)`);
+    await L.highlight('Showing');
+    await L.result(`Results page: ${a2} products, SQL error shown: ${err ? 'YES' : 'no'}. Blocked by prepared statements.`, a2 === 0 && !err);
+  });
+  check(1, 'SQLI-01', c === 2 && a === 0 && a2 === 0 && !err, `control=${c} payloadBox=${a} payloadPage=${a2} sqlError=${err}`);
 }
 
 async function step2(L, R) {
-  await pause('Step 2 · XSS-02: stored XSS through the contact form, viewed by the admin');
+  header(2, 'XSS-02: stored XSS through the contact form, viewed by the admin');
   const P = '<img src=x onerror=alert(1)>';
-  await L.go(`${SITE}/contact.php`); await L.banner('Step 2 · Stored XSS (XSS-02)', 'A guest sends the payload as name and message');
-  await L.type('#contact-form [name=name]', P); await L.type('#contact-form [name=email]', 'guest@lumeegy.test');
-  await L.type('#contact-form [name=subject]', P); await L.type('#contact-form [name=message]', P);
-  await L.click('#contact-form button[type=submit]', false);
-  await L.note(await L.text('#contact-msg') || 'Message sent');
-  await reveal(R, 'the admin opens Messages');
-  await R.go(`${SITE}/admin/messages.php`); await R.banner('Step 2 · Admin opens Messages', 'Payload is shown as text: output escaped with h()');
-  await R.highlight(P);
-  const raw = await R.js(`document.documentElement.innerHTML.split('<img src=x onerror').length-1`);
-  await R.note(`Payload displayed as plain text. Executable <img onerror> tags in the page: ${raw}. No alert ran.`, raw === 0);
+  await L.banner('Step 2 · Stored XSS (XSS-02)', 'A guest plants script in a message the admin will read · defence: h() escaping');
+  await L.go(`${SITE}/contact.php`);
+  await act(L, `A guest sends a contact message whose name, subject and text are:\n${P}\nIf the admin page printed it raw, the browser would run alert(1).`, async () => {
+    await L.type('#contact-form [name=name]', P); await L.type('#contact-form [name=email]', 'guest@lumeegy.test');
+    await L.type('#contact-form [name=subject]', P); await L.type('#contact-form [name=message]', P);
+    await L.click('#contact-form button[type=submit]', false);
+    await L.result(`${await L.js(`(document.getElementById('contact-msg')||{}).innerText||'Message sent'`)}\nThe payload is now stored in the database.`);
+  });
+  let raw = -1;
+  await R.banner('Step 2 · Stored XSS (XSS-02)', 'The admin reads the message');
+  await act(R, 'The admin opens Messages. Expected: the payload is shown as plain text and NO alert pops up.', async () => {
+    await R.go(`${SITE}/admin/messages.php`); await R.highlight(P);
+    raw = await R.js(`document.documentElement.innerHTML.split('<img src=x onerror').length-1`);
+    await R.result(`Shown as text (highlighted). Executable <img onerror> tags on the page: ${raw}. No alert ran.\nEvery output goes through h() (htmlspecialchars).`, raw === 0);
+  });
   check(2, 'XSS-02', raw === 0, `raw tags=${raw}`);
 }
 
 async function step3(L, R) {
-  await pause('Step 3 · AUTH-01: brute force → lockout → Security Events → admin Unlock');
-  await R.go(`${SITE}/admin/security.php`); await R.banner('Step 3 · Admin: Security Events (C1)', 'Watch this page after the attack');
-  await L.go(`${SITE}/account.php`); await L.banner('Step 3 · Brute force (AUTH-01)', `Attacker tries wrong passwords for ${B_EMAIL}`);
-  let last = '';
-  for (let i = 1; i <= 6; i++) {
-    await L.type('form:has(input[name=action][value=login]) [name=email]', B_EMAIL);
-    await L.type('form:has(input[name=action][value=login]) [name=password]', `wrong${i}`);
-    const t0 = Date.now(); await L.click('form:has(input[name=action][value=login]) button[type=submit]'); const ms = Date.now() - t0;
-    last = await L.js(`(document.body.innerText.match(/Too many attempts[^\\n]*|Invalid email or password\\.?/)||[''])[0]`);
-    await L.banner('Step 3 · Brute force (AUTH-01)', `Attempt ${i}/6 with "wrong${i}"  ·  ${ms} ms`);
-    await L.note(`Attempt ${i}: ${last}  (${ms} ms, delay grows after the 2nd failure)`, true);
-    await beat(1400);
-  }
-  const locked = /Too many attempts/.test(last);
-  await L.note(`${last}\nAccount locked by C4; remaining minutes are shown.`, locked);
-  await reveal(R, 'Security Events after the brute force');
-  await R.go(`${SITE}/admin/security.php`); await R.banner('Step 3 · Security Events (C1)', 'login_failed ×5 and login_locked (critical) were logged');
-  await R.highlight('login_locked');
-  const f = events('login_failed'), k = events('login_locked');
-  await R.note(`Logged: ${f} × login_failed, ${k} × login_locked`, f === '5' && k === '1');
-  await beat(5000);
-  await reveal(R, 'the admin unlocks customer B');
-  await R.go(`${SITE}/admin/users.php?id=3`); await R.banner('Step 3 · Admin unlocks the account (C4)', 'Sign-in lock box → Unlock account');
-  await R.highlight('Unlock account'); await beat(3000);
-  await R.click('form:has(input[name=unlock_user_id]) button[type=submit]');
-  await R.banner('Step 3 · Admin unlocked the account (C4)', 'login_unlock() cleared the counters');
-  await R.highlight('Sign-in lock cleared'); await R.note('Sign-in lock cleared; account_unlocked logged.');
-  await reveal(L, 'customer B signs in again');
+  header(3, 'AUTH-01: brute force → lockout → Security Events → admin Unlock');
+  await L.banner('Step 3 · Brute force (AUTH-01)', 'Password guessing against customer B · defence: C4 lockout + C1 logging');
+  await R.banner('Step 3 · Brute force (AUTH-01)', 'The admin will see the attack');
   await L.go(`${SITE}/account.php`);
-  await L.type('form:has(input[name=action][value=login]) [name=email]', B_EMAIL);
-  await L.type('form:has(input[name=action][value=login]) [name=password]', B_PW);
-  await L.click('form:has(input[name=action][value=login]) button[type=submit]');
-  const signedIn = await L.js(`/Welcome back|Logout/i.test(document.body.innerText)`);
-  await L.banner('Step 3 · The real owner signs in again', 'After the admin unlock'); await L.note(signedIn ? 'Customer B is signed in.' : 'Sign-in failed', signedIn);
-  check(3, 'AUTH-01', locked && f === '5' && k === '1' && signedIn, `locked=${locked} failed=${f} lockedEvt=${k} signedInAfterUnlock=${signedIn}`);
-  await L.go(`${SITE}/account.php?action=logout`);
+  let last = '';
+  await act(L, `The attacker guesses customer B's password 6 times (wrong1 … wrong6).\nExpected: the server slows down after 2 failures, then locks the account.`, async () => {
+    for (let i = 1; i <= 6; i++) {
+      await L.type('form:has(input[name=action][value=login]) [name=email]', B_EMAIL);
+      await L.type('form:has(input[name=action][value=login]) [name=password]', `wrong${i}`);
+      const t0 = Date.now(); await L.click('form:has(input[name=action][value=login]) button[type=submit]'); const ms = Date.now() - t0;
+      last = await L.js(`(document.body.innerText.match(/Too many attempts[^\\n]*|Invalid email or password\\.?/)||[''])[0]`);
+      await L.card('NOW', `Attempt ${i}/6 with "wrong${i}": ${last}  (${ms} ms)`);
+      await beat(1400);
+    }
+    await L.result(`${last}\nAccount locked (C4). Note the growing response time before the lock (progressive delay).`, /Too many attempts/.test(last));
+  });
+  const locked = /Too many attempts/.test(last);
+  let f = 0, k = 0;
+  await act(R, 'The admin opens Security Events. Expected: 5 × login_failed and 1 × login_locked (critical) for customer B.', async () => {
+    await R.go(`${SITE}/admin/security.php`); await R.highlight('login_locked');
+    f = events('login_failed'); k = events('login_locked');
+    await R.result(`Logged by C1: ${f} × login_failed, ${k} × login_locked. The attack is visible to the admin.`, f === 5 && k === 1);
+  });
+  await act(R, 'The admin opens customer B and clicks "Unlock account". Expected: "Sign-in lock cleared."', async () => {
+    await R.go(`${SITE}/admin/users.php?id=3`); await R.highlight('Unlock account'); await beat(2000);
+    await R.click('form:has(input[name=unlock_user_id]) button[type=submit]');
+    await R.highlight('Sign-in lock cleared');
+    await R.result('Sign-in lock cleared (login_unlock()); account_unlocked is logged.');
+  });
+  let signedIn = false;
+  await act(L, 'The real customer B now signs in with the correct password. Expected: success.', async () => {
+    await L.go(`${SITE}/account.php`);
+    await L.type('form:has(input[name=action][value=login]) [name=email]', B_EMAIL);
+    await L.type('form:has(input[name=action][value=login]) [name=password]', B_PW);
+    await L.click('form:has(input[name=action][value=login]) button[type=submit]');
+    signedIn = await L.js(`/Welcome back|Logout/i.test(document.body.innerText)`);
+    await L.result(signedIn ? 'Customer B is signed in again after the unlock.' : 'Sign-in failed', signedIn);
+  });
+  check(3, 'AUTH-01', locked && f === 5 && k === 1 && signedIn, `locked=${locked} failed=${f} lockedEvt=${k} signedInAfterUnlock=${signedIn}`);
 }
 
 async function step4(L, R) {
-  await pause('Step 4 · RBAC-01/02: a customer opens /admin and another customer\'s order');
-  await L.go(`${SITE}/account.php`);
-  await L.type('form:has(input[name=action][value=login]) [name=email]', A_EMAIL);
-  await L.type('form:has(input[name=action][value=login]) [name=password]', A_PW);
-  await L.click('form:has(input[name=action][value=login]) button[type=submit]');
-  await L.go(`${SITE}/admin/orders.php`);
-  const url1 = await L.js('location.href');
-  await L.banner('Step 4 · Customer A opens /admin/orders.php (RBAC-01)', 'Role check in admin/includes/auth.php');
-  await L.note(`Redirected to ${url1.replace(SITE, '')}: no admin data.`, url1.includes('/admin/login.php')); await beat(5000);
-  await L.go(`${SITE}/api/admin-products.php?action=list`);
-  const api = await L.js('document.body.innerText'); await L.banner('Step 4 · Customer A calls an admin API', 'api/admin-products.php');
-  await L.note(`Answer: ${api.trim()}`, /Unauthorized/.test(api)); await beat(5000);
-  await L.go(`${SITE}/instapay-upload.php?order_id=1`);
-  const own = await L.js(`document.body.innerText.includes('AAA111')`);
-  await L.banner('Step 4 · Control: A opens her own order (id=1)', 'Works for the owner'); await L.note(own ? 'Own order LME-AAA111 shown.' : 'Own order not shown', own); await beat(5000);
-  await L.go(`${SITE}/instapay-upload.php?order_id=2`);
-  const url2 = await L.js('location.href'); const leak = await L.js(`document.body.innerText.includes('BBB222')`);
-  await L.banner('Step 4 · IDOR: A changes order_id to 2 (customer B) (RBAC-02)', 'Ownership check can_view_order()');
-  await L.note(`Redirected to ${url2.replace(SITE, '')}. B's order shown: ${leak ? 'YES' : 'no'}.`, !leak && !url2.includes('order_id=2'));
-  const d = events('access_denied');
-  await reveal(R, 'access_denied in Security Events');
-  await R.go(`${SITE}/admin/security.php`); await R.banner('Step 4 · Security Events', 'access_denied logged (C1)'); await R.highlight('access_denied');
-  await R.note(`${d} × access_denied logged`, Number(d) >= 1);
-  check(4, 'RBAC-01/02', url1.includes('/admin/login.php') && /Unauthorized/.test(api) && own && !leak, `adminRedirect=${url1.includes('/admin/login.php')} api403=${/Unauthorized/.test(api)} own=${own} leakB=${leak} denied=${d}`);
+  header(4, "RBAC-01/02: a customer tries the admin area and another customer's order");
+  await L.banner('Step 4 · Access control (RBAC-01/02)', 'A normal customer tries to reach what is not hers · defence: role and ownership checks');
+  let who = '', url1 = '', api = '', own = false, url2 = '', leak = true;
+  await act(L, 'Sign in as customer A (Alice): a normal customer, NOT an admin.', async () => {
+    await L.go(`${SITE}/account.php?action=logout`);
+    await L.type('form:has(input[name=action][value=login]) [name=email]', A_EMAIL);
+    await L.type('form:has(input[name=action][value=login]) [name=password]', A_PW);
+    await L.click('form:has(input[name=action][value=login]) button[type=submit]');
+    who = await L.js(`(document.body.innerText.match(/Welcome back,?\\s*[^|\\n]*/i)||[''])[0].trim()`);
+    await L.highlight('Welcome back');
+    await L.result(`${who || 'Signed in'} → customer A is logged in, with role "customer".`, !!who);
+  });
+  await act(L, 'RBAC-01: Alice types the admin address /admin/orders.php.\nExpected: DENIED, no orders shown.', async () => {
+    await L.go(`${SITE}/admin/orders.php`); url1 = await L.js('location.pathname');
+    await L.result(`DENIED. The server did not show the orders; it sent her to the admin sign-in page (${url1}).\nadmin/includes/auth.php checks role === 'admin' on every admin page, and logs access_denied.`, url1 === '/admin/login.php');
+  });
+  await act(L, 'RBAC-01: Alice calls an admin API directly: /api/admin-products.php?action=list.\nExpected: DENIED.', async () => {
+    await L.go(`${SITE}/api/admin-products.php?action=list`); api = (await L.js('document.body.innerText')).trim();
+    await L.result(`DENIED: the API answered ${api} (HTTP 403). It checks the role too.`, /Unauthorized/.test(api));
+  });
+  await act(L, 'Control: Alice opens HER OWN order (order_id=1).\nExpected: allowed, her order LME-AAA111 is shown.', async () => {
+    await L.go(`${SITE}/instapay-upload.php?order_id=1`); own = await L.js(`document.body.innerText.includes('AAA111')`);
+    await L.highlight('AAA111');
+    await L.result(own ? 'Allowed: her own order LME-AAA111 is shown. The page works for the owner.' : 'Own order not shown', own);
+  });
+  await act(L, "RBAC-02 (IDOR): Alice changes the number in the URL to order_id=2, which is customer B's order.\nExpected: DENIED, none of B's data.", async () => {
+    await L.go(`${SITE}/instapay-upload.php?order_id=2`);
+    url2 = await L.js('location.pathname'); leak = await L.js(`document.body.innerText.includes('BBB222')`);
+    await L.result(`DENIED: sent away to ${url2}; B's order (LME-BBB222) shown: ${leak ? 'YES' : 'no'}.\ncan_view_order() checks that the order belongs to the signed-in customer.`, !leak);
+  });
+  let d = 0;
+  await R.banner('Step 4 · Access control (RBAC-01/02)', 'What the admin sees');
+  await act(R, 'The admin opens Security Events. Expected: access_denied rows for customer A.', async () => {
+    await R.go(`${SITE}/admin/security.php`); await R.highlight('access_denied'); d = events('access_denied');
+    await R.result(`${d} × access_denied logged for customer A's attempts (C1).`, d >= 1);
+  });
+  check(4, 'RBAC-01/02', url1 === '/admin/login.php' && /Unauthorized/.test(api) && own && !leak, `adminRedirect=${url1} api403=${/Unauthorized/.test(api)} own=${own} leakB=${leak} denied=${d}`);
 }
 
-async function step5(L, R, poc) {
-  await pause('Step 5 · CSRF-01/02: forged requests without the CSRF token');
-  await L.go(`${SITE}/shop.php`); await L.banner('Step 5 · CSRF (CSRF-01)', 'Add-to-cart request sent WITHOUT the token');
-  const send = tok => L.js(`fetch('/api/cart.php',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:new URLSearchParams(Object.assign({action:'add',product_id:'3',quantity:'1'},${tok ? "{csrf:document.getElementById('lume-csrf').value}" : '{}'}))}).then(async r=>r.status+' '+await r.text())`);
+async function step5(L, R) {
+  header(5, 'CSRF-01/02: forged requests without the CSRF token');
+  await L.banner('Step 5 · CSRF (CSRF-01/02)', 'Customer A is signed in · defence: secret CSRF token in every form');
+  await L.go(`${SITE}/shop.php`);
   const before = events('csrf_rejected');
-  const noTok = await send(false); await L.note(`No token → ${noTok}`, false); await beat(5000);
-  await L.banner('Step 5 · Cross-site attack page (CSRF-02)', 'http://localhost:9000/csrf-poc.html auto-submits a forged add-to-cart');
-  await beat(3000);
-  await L.go('http://localhost:9000/csrf-poc.html');
-  await L.waitLoad(L.loads - 1, 3000);
-  const where = await L.js('location.href');
-  await L.banner('Step 5 · Forged POST arrived without a token', 'csrf_verify() refused it; the cart was not changed');
-  await L.note(`Browser ended on ${where.replace(SITE, '')}: request refused, nothing added.`, true); await beat(5000);
-  await L.go(`${SITE}/shop.php`); await L.banner('Step 5 · Control: the real page sends its token', 'Same request with the valid token');
-  const withTok = await send(true); await L.note(`With token → ${withTok}`, withTok.startsWith('200'));
-  const after = events('csrf_rejected');
-  await reveal(R, 'csrf_rejected in Security Events');
-  await R.go(`${SITE}/admin/security.php`); await R.banner('Step 5 · Security Events', 'csrf_rejected logged (C1)'); await R.highlight('csrf_rejected');
-  await R.note(`csrf_rejected: ${before} → ${after}`, Number(after) > Number(before));
-  check(5, 'CSRF-01/02', noTok.startsWith('400') && withTok.startsWith('200') && Number(after) >= Number(before) + 2, `noToken="${noTok.slice(0, 60)}" withToken=${withTok.slice(0, 3)} rejected ${before}->${after}`);
+  const send = tok => L.js(`fetch('/api/cart.php',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:new URLSearchParams(Object.assign({action:'add',product_id:'3',quantity:'1'},${tok ? "{csrf:document.getElementById('lume-csrf').value}" : '{}'}))}).then(async r=>r.status+' '+await r.text())`);
+  let noTok = '', withTok = '', cartEmpty = false;
+  await act(L, 'CSRF-01: send an add-to-cart request with Alice\'s cookie but WITHOUT the CSRF token.\nExpected: refused.', async () => {
+    await L.panel('Request sent', 'POST /api/cart.php\nCookie: (Alice\'s session)\nBody: action=add&product_id=3&quantity=1\n      ← no csrf token');
+    await beat(2000); noTok = await send(false);
+    await L.panel('Request sent → server answer', `POST /api/cart.php   (no csrf token)\n\nHTTP ${noTok}`);
+    await L.result('Refused (HTTP 400 "Invalid CSRF token"). csrf_verify() logs csrf_rejected.', noTok.startsWith('400'));
+  });
+  await act(L, "CSRF-02: Alice visits an attacker's website (localhost:9000) offering a free gift.", async () => {
+    await L.go(`${ATTACKER}/gift.html`);
+    await L.result("This page belongs to the attacker. Its button submits a hidden form to the shop's cart, using Alice's cookie but with no token.");
+  });
+  await act(L, "Alice clicks \"Claim your free gift\".\nExpected: the shop refuses the forged request; nothing is added to her cart.", async () => {
+    await L.click('#claim');
+    cartEmpty = await L.js(`/empty/i.test(document.body.innerText)`);
+    await L.result(`The shop refused it and sent her to the cart page: ${cartEmpty ? '"Your bag is empty"' : 'cart NOT empty'}.\nThe attacker's site cannot read or send the secret token, so the forgery fails.`, cartEmpty);
+  });
+  await act(L, 'Control: the real shop page sends the same request WITH its token.\nExpected: accepted.', async () => {
+    await L.go(`${SITE}/shop.php`); withTok = await send(true);
+    await L.panel('Request sent → server answer', `POST /api/cart.php   (with the page's csrf token)\n\nHTTP ${withTok}`);
+    await L.result('Accepted (HTTP 200): the same request works when it carries the token. Only forged requests are blocked.', withTok.startsWith('200'));
+  });
+  let after = 0;
+  await R.banner('Step 5 · CSRF (CSRF-01/02)', 'What the admin sees');
+  await act(R, 'The admin opens Security Events. Expected: new csrf_rejected rows.', async () => {
+    await R.go(`${SITE}/admin/security.php`); await R.highlight('csrf_rejected'); after = events('csrf_rejected');
+    await R.result(`csrf_rejected: ${before} → ${after} (the API request and the attacker's page).`, after >= before + 2);
+  });
+  check(5, 'CSRF-01/02', noTok.startsWith('400') && cartEmpty && withTok.startsWith('200') && after >= before + 2, `noToken=${noTok.slice(0, 3)} giftCartEmpty=${cartEmpty} withToken=${withTok.slice(0, 3)} rejected ${before}->${after}`);
 }
 
 async function step6(L, R) {
-  await pause('Step 6 · UPL-01: upload shell.php.jpg as the admin');
-  await R.go(`${SITE}/admin/media.php`); await R.banner('Step 6 · File upload (UPL-01)', 'Uploading shell.php.jpg: PHP code with a .jpg name and image/jpeg type');
-  await beat(3000);
-  const res = await R.js(`(()=>{const fd=new FormData();fd.append('action','upload');
-    fd.append('files[]',new File(['<?php echo 1; ?>\\n'],'shell.php.jpg',{type:'image/jpeg'}));
-    return fetch('/api/media.php',{method:'POST',headers:{'X-CSRF-Token':document.querySelector('meta[name=csrf-token]').content,'X-Requested-With':'XMLHttpRequest'},body:fd}).then(async r=>r.status+' '+await r.text());})()`);
-  const rej = events('upload_rejected');
-  await R.note(`Server answer: ${res}\nfinfo saw PHP, not an image → rejected; ${rej} × upload_rejected logged.`, res.startsWith('400'));
-  await beat(5000);
-  await reveal(L, 'a .php file under assets/ cannot run');
-  await L.go(`${SITE}/assets/x.php`); const code = await L.js('document.title');
-  await L.banner('Step 6 · Even a stored script could not run', 'assets/.htaccess denies .php under assets/'); await L.note(`GET /assets/x.php → ${code}`, /403|denied/i.test(code));
-  await reveal(R, 'upload_rejected in Security Events');
-  await R.go(`${SITE}/admin/security.php`); await R.banner('Step 6 · Security Events', 'upload_rejected logged (H3 + C1)'); await R.highlight('upload_rejected');
-  check(6, 'UPL-01', res.startsWith('400') && rej === '1', `answer="${res.slice(0, 70)}" rejected=${rej}`);
+  header(6, 'UPL-01: upload shell.php.jpg as the admin');
+  await R.banner('Step 6 · Malicious upload (UPL-01)', 'A PHP web shell disguised as an image · defence: real file-type check + assets/.htaccess');
+  await R.go(`${SITE}/admin/media.php`);
+  let toast = '', direct = '', rej = 0, code = '';
+  await act(R, 'Upload "shell.php.jpg" through the Media page: PHP code (<?php echo 1; ?>) with a .jpg name.\nExpected: rejected, because the content is not really an image.', async () => {
+    // Keep the page's own error message so it can be shown after the toast fades.
+    await R.js(`(()=>{const o=window.adminToast;window.__toast='';window.adminToast=(m,k)=>{window.__toast=String(m);return o&&o(m,k);};})()`);
+    await R.setFile('#media-upload-input', SHELL);
+    for (let t = 0; t < 80 && !toast; t++) { await sleep(150); toast = await R.js('window.__toast'); }
+    await R.result(`Rejected by the Media page: "${toast || '(no message)'}"\nThe server read the real content with finfo (text/x-php), not the .jpg name.`, /Unsupported file type/.test(toast));
+  });
+  await act(R, 'Same file through the direct upload request that UPL-01 tested in Burp (files[] with Content-Type image/jpeg).\nExpected: rejected and logged.', async () => {
+    direct = await R.js(`(()=>{const fd=new FormData();fd.append('action','upload');
+      fd.append('files[]',new File(['<?php echo 1; ?>\\n'],'shell.php.jpg',{type:'image/jpeg'}));
+      return fetch('/api/media.php',{method:'POST',headers:{'X-CSRF-Token':document.querySelector('meta[name=csrf-token]').content,'X-Requested-With':'XMLHttpRequest'},body:fd}).then(async r=>r.status+' '+await r.text());})()`);
+    rej = events('upload_rejected');
+    await R.panel('Request sent → server answer', `POST /api/media.php\nfiles[] = shell.php.jpg   (Content-Type: image/jpeg, content: <?php echo 1; ?>)\n\nHTTP ${direct}`);
+    await R.result(`Rejected (HTTP 400): upload_check_image() found PHP, not an image, and logged it: ${rej} × upload_rejected.`, direct.startsWith('400') && rej === 1);
+  });
+  await L.banner('Step 6 · Malicious upload (UPL-01)', 'Second layer: could a script in the uploads folder ever run?');
+  await act(L, 'Second layer: even IF a .php file got into the uploads folder, could it run?\nThe attacker opens /assets/x.php. Expected: refused.', async () => {
+    await L.go(`${SITE}/assets/x.php`); code = await L.js('document.title');
+    await L.result(`"${code}" (HTTP 403). assets/.htaccess refuses to run any .php under assets/, so an uploaded script could never execute.`, /403|denied/i.test(code));
+  });
+  await act(R, 'The admin opens Security Events. Expected: the upload_rejected row from the direct request.', async () => {
+    await R.go(`${SITE}/admin/security.php`); await R.highlight('upload_rejected');
+    await R.result(`${events('upload_rejected')} × upload_rejected logged (H3 + C1). The Media page's own rejection is not logged yet: a known gap, see demo-script.md.`, events('upload_rejected') >= 1);
+  });
+  check(6, 'UPL-01', /Unsupported file type/.test(toast) && direct.startsWith('400') && rej === 1 && /403|denied/i.test(code), `mediaPage="${toast.slice(0, 50)}" direct=${direct.slice(0, 3)} rejected=${rej} assetsPhp="${code}"`);
 }
 
 async function step7(L, R) {
-  await pause('Step 7 · C3: errors show a generic page, details only in the log');
-  await L.go(`${SITE}/does-not-exist.php`); await L.banner('Step 7 · 404 page (C3)', 'Branded page, no server banner');
-  const b404 = await L.js(`/Apache\\/|PHP\\//.test(document.documentElement.outerHTML)`); await L.note(`Version banner in page: ${b404 ? 'YES' : 'no'}`, !b404);
-  await beat(4000);
-  await L.go(`${SITE}/includes/`); await L.banner('Step 7 · 403 page for a blocked folder (C3)', '/includes/ is denied by .htaccess');
-  const b403 = await L.js(`/Apache\\/|PHP\\//.test(document.documentElement.outerHTML)`); await L.note(`Version banner in page: ${b403 ? 'YES' : 'no'}`, !b403);
-  await reveal(R, 'force a database error as the admin');
-  await R.go(`${SITE}/admin/shipping.php`); await R.banner('Step 7 · Force a database error', 'Add a shipping zone named "Cairo" (already exists)');
-  await R.type('#zone-form [name=name]', 'Cairo'); await R.type('#zone-form [name=cost]', '10');
-  await R.click('#zone-form button[type=submit]');
-  const msg = await R.js(`(document.body.innerText.match(/[^\\n]*Reference: [a-f0-9]{8}[^\\n]*/)||[''])[0]`);
-  const ref = (msg.match(/Reference: ([a-f0-9]{8})/) || [])[1];
-  const sqlOnPage = await R.js(`/SQLSTATE/.test(document.body.innerText)`);
-  const logLine = ref ? (readFileSync(ERRLOG, 'utf8').split(/\r?\n/).reverse().find(l => l.includes(`ref ${ref}`)) || '') : '';
-  const detail = (logLine.match(/\[ref [a-f0-9]{8}\].*/) || [''])[0];
-  await R.highlight('Reference:');
-  await R.note(`On screen: ${msg}\nServer log only: ${detail.slice(0, 170)}`, !!ref && !sqlOnPage && !!detail);
-  console.log(`  log: ${detail}`);
+  header(7, 'C3: errors show a generic page, details only in the log');
+  await L.banner('Step 7 · Secure error handling (C3)', 'Errors must not leak versions, paths or SQL');
+  let b404 = true, b403 = true, ref = '', sqlOnPage = true, detail = '';
+  await act(L, 'Open a page that does not exist: /does-not-exist.php.\nExpected: our own 404 page, no server or PHP version.', async () => {
+    await L.go(`${SITE}/does-not-exist.php`); b404 = await L.js(`/Apache\\/|PHP\\//.test(document.documentElement.outerHTML)`);
+    await L.result(`Branded 404 page. Server/PHP version in the page: ${b404 ? 'YES' : 'none'}.`, !b404);
+  });
+  await act(L, 'Try to open a protected folder: /includes/ (application code).\nExpected: our own 403 page, nothing listed.', async () => {
+    await L.go(`${SITE}/includes/`); b403 = await L.js(`/Apache\\/|PHP\\//.test(document.documentElement.outerHTML)`);
+    await L.result(`Branded 403 page; the folder is blocked by .htaccess. Server/PHP version shown: ${b403 ? 'YES' : 'none'}.`, !b403);
+  });
+  await R.banner('Step 7 · Secure error handling (C3)', 'Force a real database error');
+  await act(R, 'The admin adds a shipping zone named "Cairo", which already exists, so the database raises an error.\nExpected: a short message with a reference number, no SQL.', async () => {
+    await R.go(`${SITE}/admin/shipping.php`);
+    await R.type('#zone-form [name=name]', 'Cairo'); await R.type('#zone-form [name=cost]', '10');
+    await R.click('#zone-form button[type=submit]');
+    const msg = await R.js(`(document.body.innerText.match(/[^\\n]*Reference: [a-f0-9]{8}[^\\n]*/)||[''])[0]`);
+    ref = (msg.match(/Reference: ([a-f0-9]{8})/) || [])[1] || '';
+    sqlOnPage = await R.js(`/SQLSTATE/.test(document.body.innerText)`);
+    await R.highlight('Reference:');
+    await R.result(`On screen: "${msg}"\nNo SQL, no table names. Before C3 this showed the raw SQLSTATE error.`, !!ref && !sqlOnPage);
+  });
+  await act(R, `Where did the details go? Look up reference ${ref || '?'} in the server error log.`, async () => {
+    const logLine = ref ? (readFileSync(ERRLOG, 'utf8').split(/\r?\n/).reverse().find(l => l.includes(`ref ${ref}`)) || '') : '';
+    detail = (logLine.match(/\[ref [a-f0-9]{8}\].*/) || [''])[0].replace(/\\\\/g, '\\').replace(/, referer:.*/, '');
+    await R.panel(`C:\\Apache24\\logs\\lumeegy-error.log  (server only)`, detail || '(not found)');
+    await R.result('The full database error is only in the server log, matched by the reference number. Users never see it.', /SQLSTATE/.test(detail));
+    console.log(`  log: ${detail}`);
+  });
   check(7, 'C3', !b404 && !b403 && !!ref && !sqlOnPage && /SQLSTATE/.test(detail), `ref=${ref} sqlOnPage=${sqlOnPage} logged=${/SQLSTATE/.test(detail)}`);
 }
 
 async function step8(L, R) {
-  await pause('Step 8 · Tool results: ZAP baseline and Semgrep before → after');
-  await L.go(fileUrl(ZAP)); await L.banner('Step 8 · OWASP ZAP baseline', '0 High · 7 Medium · 6 Low · 16 Informational, each with our verdict');
-  await reveal(R, 'Semgrep before → after in the report');
-  await R.go(fileUrl(REPORT) + '#page=17');
-  check(8, 'Tool results', existsSync(ZAP) && existsSync(REPORT), 'ZAP summary and report opened (report §6: Semgrep 201 → 199, SAST-01/02/03 closed)');
+  header(8, 'Tool results: ZAP baseline and Semgrep before → after');
+  await L.banner('Step 8 · Tool results (Part 3)', 'OWASP ZAP baseline scan of the local site');
+  await act(L, 'Open the OWASP ZAP baseline summary.', async () => {
+    await L.go(fileUrl(ZAP));
+    await L.result('ZAP baseline: 0 High · 7 Medium · 6 Low · 16 Informational alert types, each with our verdict. (No ZAP rescan was run after the fixes.)');
+  });
+  await R.banner('Step 8 · Tool results (Part 3)', 'Semgrep before → after');
+  await act(R, 'Open the report at "Final results": Semgrep before → after and the 16/16 test results.', async () => {
+    await R.go(fileUrl(REPORT) + '#page=17');
+  });
+  check(8, 'Tool results', existsSync(ZAP) && existsSync(REPORT), 'ZAP summary and report opened');
+  await L.clearCards();
+  await L.card('NEXT', 'End of the demo. Click Continue to reset the test database and close both windows.');
+  await waitClick(L, 'Finish the demo');
 }
 
 // ── Main ──
@@ -367,31 +491,29 @@ if (START === 1) {
   console.log(`  security_events = ${sql('SELECT COUNT(*) FROM security_events')}`);
 }
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
-const poc = spawn('php', ['-S', 'localhost:9000', '-t', POC_DIR], { stdio: 'ignore' });
+const poc = spawn('php', ['-S', 'localhost:9000', '-t', TMP], { stdio: 'ignore' });
 const steps = [step1, step2, step3, step4, step5, step6, step7, step8];
 let L, R;
 try {
-  L = await Win.open('left', 9351, 0, BURP ? ['--proxy-server=127.0.0.1:8082', '--proxy-bypass-list=<-loopback>'] : []);
-  R = await Win.open('right', 9352, 960);
+  L = await Win.open('left', 'LEFT · attacker / customer', 9351, 0, BURP ? ['--proxy-server=127.0.0.1:8082', '--proxy-bypass-list=<-loopback>'] : []);
+  R = await Win.open('right', 'RIGHT · admin', 9352, 960);
   await R.go(`${SITE}/admin/login.php`);
   await R.type('[name=email]', ADMIN_EMAIL); await R.type('[name=password]', ADMIN_PW); await R.click('button[type=submit]');
-  if (!(await R.js('location.pathname')).startsWith('/admin/') || (await R.js('location.pathname')) === '/admin/login.php') throw new Error('admin sign-in failed');
-  await R.banner('Admin window', 'Signed in as the test admin'); await L.go(`${SITE}/`); await L.banner('Guest / customer window', BURP ? 'Traffic goes through Burp (127.0.0.1:8082)' : 'Guest');
-  console.log('Windows ready: left = guest/customer, right = admin.');
+  const p = await R.js('location.pathname');
+  if (!p.startsWith('/admin/') || p === '/admin/login.php') throw new Error('admin sign-in failed');
+  await R.banner('Admin window', 'Signed in as the test admin');
+  await L.banner('Attacker / customer window', BURP ? 'Traffic goes through Burp (127.0.0.1:8082)' : 'Not signed in (guest)');
+  await L.go(`${SITE}/`);
+  console.log('Windows ready: LEFT = attacker/customer, RIGHT = admin.');
   for (let i = START - 1; i < steps.length; i++) {
-    try { await steps[i](L, R, poc); }
+    try { await steps[i](L, R); }
     catch (e) { check(i + 1, `step ${i + 1}`, false, e.message); }
-    if (SHOTS) for (const w of [L, R]) {
-      const s = await w.send('Page.captureScreenshot', { format: 'png' });
-      if (s.result) writeFileSync(join(SHOTS, `step${i + 1}-${w.name}.png`), Buffer.from(s.result.data, 'base64'));
-    }
   }
 } catch (e) {
   check(0, 'setup', false, e.message);
 } finally {
   const passed = results.filter(r => r.pass).length;
   console.log(`\n\x1b[1m${passed} / ${results.length} steps passed\x1b[0m`);
-  if (!AUTO && KEEP) await pause('Demo finished. Windows stay open');
   console.log('Re-seeding the database…'); reseed(); console.log(`  security_events = ${sql('SELECT COUNT(*) FROM security_events')}`);
   if (!KEEP) { await L?.close(); await R?.close(); }
   poc.kill(); rl.close(); process.exit(passed === results.length ? 0 : 1);
