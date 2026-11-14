@@ -156,19 +156,24 @@ class Win {
 // ── Pacing ──
 const rl = createInterface({ input: process.stdin });
 const lines = []; rl.on('line', l => lines.push(l));
-async function pause(msg) {
-  console.log(`
-[1;36m▶ ${msg}[0m`);
+// Wait until the presenter clicks the orange Continue button (either window) or presses Enter.
+async function waitClick(label) {
   if (AUTO) { await sleep(800); return; }
-  console.log('  Click "Continue" in either window (or press Enter here)…');
+  console.log(`  Click "Continue" (${label})…`);
   const wins = [L, R].filter(Boolean);
-  for (const w of wins) await w.continueButton(msg).catch(() => {});
+  for (const w of wins) await w.continueButton(label).catch(() => {});
+  lines.length = 0;
   for (let go = false; !go;) {
     if (lines.length) { lines.shift(); break; }
     for (const w of wins) { try { if (await w.js('window.__demoGo === true')) go = true; } catch {} }
     await sleep(250);
   }
   for (const w of wins) await w.js(`(()=>{window.__demoGo=false;document.getElementById('__cont')?.remove();})()`).catch(() => {});
+}
+async function pause(msg) {
+  console.log(`
+[1;36m▶ ${msg}[0m`);
+  await waitClick(msg);
 }
 const results = [];
 const check = (step, label, pass, detail) => {
@@ -179,11 +184,10 @@ const check = (step, label, pass, detail) => {
 // Hold so the audience can read the screen (scaled by --speed; short in --auto).
 const beat = ms => sleep(AUTO ? Math.min(ms, 300) : ms * SPEED);
 // Before showing the result in the admin window: announce it, wait for Enter, count down.
-async function reveal(R, what) {
-  console.log(`  [33m↳ next: ${what} (admin window)[0m`);
-  if (AUTO) return;
-  await beat(2000); // let the audience read the attack result first
-  for (let s = 3; s >= 1; s--) { await R.banner(`Now look here → ${what}`, `in ${s}…`); await sleep(1000 * SPEED); }
+// Every switch between the two windows inside a step waits for a click.
+async function reveal(win, what) {
+  console.log(`  [33m↳ next: ${what} (${win.name} window)[0m`);
+  await waitClick(`Show → ${what}`);
 }
 const cards = w => w.js(`document.querySelectorAll('.lume-product-card').length`);
 
@@ -246,6 +250,7 @@ async function step3(L, R) {
   await R.click('form:has(input[name=unlock_user_id]) button[type=submit]');
   await R.banner('Step 3 · Admin unlocked the account (C4)', 'login_unlock() cleared the counters');
   await R.highlight('Sign-in lock cleared'); await R.note('Sign-in lock cleared; account_unlocked logged.');
+  await reveal(L, 'customer B signs in again');
   await L.go(`${SITE}/account.php`);
   await L.type('form:has(input[name=action][value=login]) [name=email]', B_EMAIL);
   await L.type('form:has(input[name=action][value=login]) [name=password]', B_PW);
@@ -315,6 +320,7 @@ async function step6(L, R) {
   const rej = events('upload_rejected');
   await R.note(`Server answer: ${res}\nfinfo saw PHP, not an image → rejected; ${rej} × upload_rejected logged.`, res.startsWith('400'));
   await beat(5000);
+  await reveal(L, 'a .php file under assets/ cannot run');
   await L.go(`${SITE}/assets/x.php`); const code = await L.js('document.title');
   await L.banner('Step 6 · Even a stored script could not run', 'assets/.htaccess denies .php under assets/'); await L.note(`GET /assets/x.php → ${code}`, /403|denied/i.test(code));
   await reveal(R, 'upload_rejected in Security Events');
@@ -329,6 +335,7 @@ async function step7(L, R) {
   await beat(4000);
   await L.go(`${SITE}/includes/`); await L.banner('Step 7 · 403 page for a blocked folder (C3)', '/includes/ is denied by .htaccess');
   const b403 = await L.js(`/Apache\\/|PHP\\//.test(document.documentElement.outerHTML)`); await L.note(`Version banner in page: ${b403 ? 'YES' : 'no'}`, !b403);
+  await reveal(R, 'force a database error as the admin');
   await R.go(`${SITE}/admin/shipping.php`); await R.banner('Step 7 · Force a database error', 'Add a shipping zone named "Cairo" (already exists)');
   await R.type('#zone-form [name=name]', 'Cairo'); await R.type('#zone-form [name=cost]', '10');
   await R.click('#zone-form button[type=submit]');
@@ -346,6 +353,7 @@ async function step7(L, R) {
 async function step8(L, R) {
   await pause('Step 8 · Tool results: ZAP baseline and Semgrep before → after');
   await L.go(fileUrl(ZAP)); await L.banner('Step 8 · OWASP ZAP baseline', '0 High · 7 Medium · 6 Low · 16 Informational, each with our verdict');
+  await reveal(R, 'Semgrep before → after in the report');
   await R.go(fileUrl(REPORT) + '#page=17');
   check(8, 'Tool results', existsSync(ZAP) && existsSync(REPORT), 'ZAP summary and report opened (report §6: Semgrep 201 → 199, SAST-01/02/03 closed)');
 }
