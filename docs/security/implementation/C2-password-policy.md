@@ -10,9 +10,9 @@
 - Known limit: bcrypt only uses the first 72 bytes, so characters beyond that do not add strength (recorded under "New findings").
 
 **Files and functions**
-- `includes/functions.php:326` section header, `password_policy_errors()` at `:337`.
-- `account.php:82` registration (replaces `strlen($pass) < 8`), `account.php:136` password reset (looks up the account's email and first name for the "no personal data" rules).
-- `account.php:225-227` (register form) and `:257-259` (reset form): `minlength`, `maxlength`, `autocomplete="new-password"`, hint text.
+- `includes/functions.php:419` section header, `password_policy_errors()` at `:430`.
+- `account.php:86` registration (replaces `strlen($pass) < 8`), `account.php:140` password reset (looks up the account's email and first name for the "no personal data" rules).
+- `account.php:229-231` (register form) and `:261-263` (reset form): `minlength`, `maxlength`, `autocomplete="new-password"`, hint text.
 - `includes/common-passwords.txt` (new).
 
 **How to verify** (automated run, raw HTTP POSTs with no browser validation: `evidence/C2-verification.txt`)
