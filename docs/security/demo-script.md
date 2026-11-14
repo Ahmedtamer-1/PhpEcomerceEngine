@@ -11,6 +11,18 @@ About 8 minutes of live security tests against the **local test copy only** (`ht
 
 Test accounts and passwords are at the top of `database/seed-security-test.sql`: admin `admin@lumeegy.test`, customer A `customer.a@lumeegy.test`, customer B `customer.b@lumeegy.test`.
 
+## Automated run (optional)
+
+[`demo-runner.mjs`](demo-runner.mjs) plays all 8 steps in two visible Edge windows: left is the guest/customer, right is the admin. Before each step it waits for **Enter**, so the narrator can explain first. Each page shows a banner (step, test ID, control) and a green or red result box. The runner resets the database at the start and the end, and refuses any site other than `localhost:8090`. It uses Edge's DevTools protocol, so there is nothing to install.
+
+```powershell
+node docs/security/demo-runner.mjs
+```
+
+Options: `--burp` routes the left window through Burp (`127.0.0.1:8082`), so every request appears live in Burp's HTTP history. `--step 3` starts at a step (no reset). `--keep` leaves the windows open. `--auto` runs without pauses (rehearsal). `--shots <folder>` saves a screenshot of both windows after each step.
+
+The runner drives the browser, not Burp's own screens. Burp Community cannot be scripted, so if the graders should see Intruder itself, run step 3 by hand as written below and the rest with the runner (`--step 4`). In the automated version, step 3 types the six wrong passwords into the login form, and step 5 sends the token-less request from the page, then opens the attacker page `csrf-poc.html` on `localhost:9000`.
+
 ## Pre-demo checklist (15 min before)
 
 | # | Check | How | Expected |
@@ -134,5 +146,7 @@ Re-run the seed (checklist step 2). It removes the test message, cart lines, loc
 | 6 | UPL-01 | ✅ Pass | `shell.php.jpg` → 400 "No files uploaded or invalid file types"; `upload_rejected` = 1; `/assets/x.php` → 403 |
 | 7 | C3 | ✅ Pass | `/does-not-exist.php` 404 and `/includes/` 403, no version banner; duplicate zone → "…Reference: a7bed3ac."; no SQLSTATE on the page; the log line for `ref a7bed3ac` holds the `PDOException: SQLSTATE[23000]` |
 | 8 | Tool results | ✅ Pass | `zap-before-summary.html`, `zap-before-alerts.png`, `semgrep-after.txt`, `semgrep-triage.md` all present |
+
+**2026-11-14: automated runner (`node docs/security/demo-runner.mjs --auto`), four runs in visible Edge windows.** Three runs passed 8 / 8. One failed at setup (see the end of this entry). Each run reset the database first and re-seeded it afterwards (`security_events` = 0). Same observations as above: lockout after 5 failures with 5 `login_failed` + 1 `login_locked`; admin Unlock, then B signs in; `access_denied` = 2; token-less cart POST → 400, with the token → 200; `shell.php.jpg` → 400 and 1 `upload_rejected`; duplicate zone → reference ID on screen, `SQLSTATE[23000] … Duplicate entry 'Cairo'` only in the log. The failed run connected to a stale Edge window left by an earlier run, so the admin sign-in form was not found. The runner now opens its own tab and closes Edge cleanly, and a setup failure still triggers the re-seed.
 
 **Still to rehearse by hand (UI only, same requests as above):** the Burp Intruder run and its results table (step 3), the Burp Repeater edits (step 5), the media-page error message (step 6), the optional `csrf-poc.html` run, and timing the full 8 minutes with both presenters. Record the date and result here after each hand rehearsal.
