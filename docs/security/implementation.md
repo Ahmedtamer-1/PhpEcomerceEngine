@@ -1,6 +1,6 @@
 # Part 1 – Security Implementation (index)
 
-Four additional security controls (C1–C4), three hardening changes (H1–H3) and three static-analysis fixes (S1–S3). Each has its own notes file with Threat → Design → Files and functions (with line numbers) → How to verify → Evidence.
+Four additional security controls (C1–C4), three hardening changes (H1–H3) and three static-analysis fixes (S1–S3). Each has its own notes file with Threat → Design → Files and functions (with line numbers, checked against merged `main`) → How to verify → Evidence.
 
 | ID | Control | Notes | Branch |
 |---|---|---|---|
