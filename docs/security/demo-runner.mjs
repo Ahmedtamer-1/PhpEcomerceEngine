@@ -233,6 +233,18 @@ const check = (step, label, pass, detail) => {
 };
 const header = (n, title) => console.log(`\n\x1b[1;36m▶ Step ${n} · ${title}\x1b[0m`);
 
+// Type into the live search box and wait until its results (or "No results found") arrive.
+async function searchFor(win, text) {
+  await win.js(`document.getElementById('lume-search-results').innerHTML=''`);
+  await win.type('#lume-search-input', text);
+  for (let i = 0; i < 50; i++) {
+    const done = await win.js(`!!document.querySelector('#lume-search-results .lume-search-result, #lume-search-results .lume-search-empty')`);
+    if (done) break;
+    await sleep(100);
+  }
+  return win.js(`document.querySelectorAll('#lume-search-results .lume-search-result').length`);
+}
+
 // ── Steps ──
 async function step1(L) {
   header(1, 'SQLI-01: SQL injection in the shop search');
@@ -240,14 +252,12 @@ async function step1(L) {
   await L.go(`${SITE}/shop.php`);
   let c = 0, a = -1;
   await act(L, 'Control: a normal search.\nType "ring" in the shop search box. Expected: the 2 rings.', async () => {
-    await L.click('#btn-search', false); await L.type('#lume-search-input', 'ring'); await beat(2500);
-    c = await L.js(`document.querySelectorAll('.lume-search-result').length`);
+    await L.click('#btn-search', false); c = await searchFor(L, 'ring'); await beat(1500);
     await L.result(`Normal search "ring" → ${c} products.`, c === 2);
   });
   const payload = "ring' OR '1'='1' -- -";
   await act(L, `Attack: type an SQL injection payload into the same box:\n${payload}\nIf the input became SQL, the OR '1'='1' would return EVERY product.`, async () => {
-    await L.type('#lume-search-input', payload); await beat(2500);
-    a = await L.js(`document.querySelectorAll('.lume-search-result').length`);
+    a = await searchFor(L, payload); await beat(1500);
     await L.result(`Payload → ${a} products ("No results found"). No extra rows, no SQL error.\nThe search text is sent to MySQL as a bound parameter (prepared statement), so it is only ever treated as text.`, a === 0);
   });
   let err = true, a2 = -1;
@@ -410,26 +420,28 @@ async function step6(L, R) {
     await R.js(`(()=>{const o=window.adminToast;window.__toast='';window.adminToast=(m,k)=>{window.__toast=String(m);return o&&o(m,k);};})()`);
     await R.setFile('#media-upload-input', SHELL);
     for (let t = 0; t < 80 && !toast; t++) { await sleep(150); toast = await R.js('window.__toast'); }
-    await R.result(`Rejected by the Media page: "${toast || '(no message)'}"\nThe server read the real content with finfo (text/x-php), not the .jpg name.`, /Unsupported file type/.test(toast));
+    rej = events('upload_rejected');
+    await R.result(`Rejected by the Media page: "${toast || '(no message)'}"\nThe server read the real content with finfo (text/x-php), not the .jpg name, and logged it: ${rej} × upload_rejected.`, /Unsupported file type/.test(toast) && rej === 1);
   });
+  let rej1 = rej;
   await act(R, 'Same file through the direct upload request that UPL-01 tested in Burp (files[] with Content-Type image/jpeg).\nExpected: rejected and logged.', async () => {
     direct = await R.js(`(()=>{const fd=new FormData();fd.append('action','upload');
       fd.append('files[]',new File(['<?php echo 1; ?>\\n'],'shell.php.jpg',{type:'image/jpeg'}));
       return fetch('/api/media.php',{method:'POST',headers:{'X-CSRF-Token':document.querySelector('meta[name=csrf-token]').content,'X-Requested-With':'XMLHttpRequest'},body:fd}).then(async r=>r.status+' '+await r.text());})()`);
     rej = events('upload_rejected');
     await R.panel('Request sent → server answer', `POST /api/media.php\nfiles[] = shell.php.jpg   (Content-Type: image/jpeg, content: <?php echo 1; ?>)\n\nHTTP ${direct}`);
-    await R.result(`Rejected (HTTP 400): upload_check_image() found PHP, not an image, and logged it: ${rej} × upload_rejected.`, direct.startsWith('400') && rej === 1);
+    await R.result(`Rejected (HTTP 400): upload_check_image() found PHP, not an image, and logged it (${rej} × upload_rejected in total).`, direct.startsWith('400') && rej === rej1 + 1);
   });
   await L.banner('Step 6 · Malicious upload (UPL-01)', 'Second layer: could a script in the uploads folder ever run?');
   await act(L, 'Second layer: even IF a .php file got into the uploads folder, could it run?\nThe attacker opens /assets/x.php. Expected: refused.', async () => {
     await L.go(`${SITE}/assets/x.php`); code = await L.js('document.title');
     await L.result(`"${code}" (HTTP 403). assets/.htaccess refuses to run any .php under assets/, so an uploaded script could never execute.`, /403|denied/i.test(code));
   });
-  await act(R, 'The admin opens Security Events. Expected: the upload_rejected row from the direct request.', async () => {
+  await act(R, 'The admin opens Security Events. Expected: two upload_rejected rows, one per attempt.', async () => {
     await R.go(`${SITE}/admin/security.php`); await R.highlight('upload_rejected');
-    await R.result(`${events('upload_rejected')} × upload_rejected logged (H3 + C1). The Media page's own rejection is not logged yet: a known gap, see demo-script.md.`, events('upload_rejected') >= 1);
+    await R.result(`${events('upload_rejected')} × upload_rejected logged (H3 + C1): both upload paths are blocked and recorded.`, events('upload_rejected') === 2);
   });
-  check(6, 'UPL-01', /Unsupported file type/.test(toast) && direct.startsWith('400') && rej === 1 && /403|denied/i.test(code), `mediaPage="${toast.slice(0, 50)}" direct=${direct.slice(0, 3)} rejected=${rej} assetsPhp="${code}"`);
+  check(6, 'UPL-01', /Unsupported file type/.test(toast) && direct.startsWith('400') && rej1 === 1 && rej === 2 && /403|denied/i.test(code), `mediaPage="${toast.slice(0, 50)}" direct=${direct.slice(0, 3)} rejected=${rej} assetsPhp="${code}"`);
 }
 
 async function step7(L, R) {
