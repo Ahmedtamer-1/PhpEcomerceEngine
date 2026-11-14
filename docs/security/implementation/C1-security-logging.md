@@ -28,7 +28,7 @@ Note: `php -S` ignores `.htaccess`, so header and deny-rule checks (H1) need Apa
 | `csrf_rejected` | warning | `includes/functions.php:178` (inside `csrf_verify()`) |
 | `access_denied` | warning | `admin/includes/auth.php:12`, `admin/login.php:31`, `api/admin-products.php:14`, `api/media.php:12`, `api/sections.php:11`, `api/section-preview.php:30` |
 | `password_reset_requested` / `_completed` | info | `includes/password-reset.php:45`, `:97` |
-| `upload_rejected` | warning | `includes/functions.php:1471`, `:1502`, `:1506` (inside `upload_check_image_path()` / `upload_check_image()`, the shared H3 check every upload handler calls) |
+| `upload_rejected` | warning | `includes/functions.php:1471`, `:1502`, `:1506` (inside `upload_check_image_path()` / `upload_check_image()`, the shared H3 check every upload handler calls); `includes/media-video.php:166` (`media_store_file()`: files that are neither image nor video, added 2026-11-14, see N7) |
 | `role_changed` | critical | `admin/users.php:77` |
 | `logout` | info | `includes/functions.php:531` (`logout_user()`) |
 
