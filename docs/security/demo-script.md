@@ -13,15 +13,35 @@ Test accounts and passwords are at the top of `database/seed-security-test.sql`:
 
 ## Automated run (optional)
 
-[`demo-runner.mjs`](demo-runner.mjs) plays all 8 steps in two visible Edge windows: left is the guest/customer, right is the admin. Before each step it shows an orange **Continue ▶** button in both windows and waits until you click it (or press Enter in the terminal), so you decide when the explanation is done. Every switch between the two windows inside a step (for example, attack → admin Security Events) also waits for a click, so nothing changes screen until you click: 18 clicks for the whole demo. Each page shows a banner (step, test ID, control) and a green or red result box. The runner resets the database at the start and the end, and refuses any site other than `localhost:8090`. It uses Edge's DevTools protocol, so there is nothing to install.
+[`demo-runner.mjs`](demo-runner.mjs) plays all 8 steps in two visible Edge windows: **LEFT = attacker / customer**, **RIGHT = admin**. Each window's top bar names it and shows the step. Every action follows the same pattern, in the window where it happens:
+
+1. A yellow **NEXT** card says what the attacker will do and what we expect.
+2. That window gets an orange outline and an orange **Continue ▶** button. **Nothing moves until you click it** (or press Enter in the terminal). The button only appears in the window that is about to act.
+3. The action runs in the page itself: typing into the real search box and forms, clicking the real buttons. Requests and server answers, and the error-log line, appear in a dark panel.
+4. A green (or red) **RESULT** card says what happened and which control blocked it.
+
+That is 30 actions plus a final **Finish** click; only after Finish does it re-seed the database and close the windows. The runner resets the database at the start too, and refuses any site other than `localhost:8090` and its own attacker page on `localhost:9000`. It uses Edge's DevTools protocol, so there is nothing to install.
 
 ```powershell
 node docs/security/demo-runner.mjs --speed 0.7
 ```
 
-Options: `--speed` scales the holds inside each step (1 = default, 0.7 = a little faster, 2 = twice as slow; typing speed does not change). `--burp` routes the left window through Burp (`127.0.0.1:8082`), so every request appears live in Burp's HTTP history. `--step 3` starts at a step (no reset). `--keep` leaves the windows open. `--auto` runs without pauses (rehearsal). `--shots <folder>` saves a screenshot of both windows after each step.
+| Step | Actions (one click each) |
+|---|---|
+| 1 SQLI-01 | Type "ring" in the search box (control) · type the payload in the same box · same payload on the shop results page |
+| 2 XSS-02 | Guest sends the payload in the contact form · admin opens Messages |
+| 3 AUTH-01 | Six wrong passwords for customer B · admin: Security Events · admin: Unlock · B signs in again |
+| 4 RBAC-01/02 | Sign in as customer A (name shown) · she opens `/admin/orders.php` · she calls an admin API · her own order (control) · B's order by changing `order_id` · admin: Security Events |
+| 5 CSRF-01/02 | Request without the token (request and answer shown) · attacker's "free gift" page on `localhost:9000` · she clicks **Claim your free gift**, and her bag stays empty · same request with the token (control) · admin: Security Events |
+| 6 UPL-01 | Upload `shell.php.jpg` on the Media page · same file through the direct request UPL-01 tested in Burp · `/assets/x.php` is refused · admin: Security Events |
+| 7 C3 | 404 page · 403 page for `/includes/` · duplicate zone, reference shown · the matching line from the server error log |
+| 8 Results | ZAP baseline summary · the report's results page · Finish |
 
-The runner drives the browser, not Burp's own screens. Burp Community cannot be scripted, so if the graders should see Intruder itself, run step 3 by hand as written below and the rest with the runner (`--step 4`). In the automated version, step 3 types the six wrong passwords into the login form, and step 5 sends the token-less request from the page, then opens the attacker page `csrf-poc.html` on `localhost:9000`.
+Options: `--speed` scales the short holds inside an action (typing speed never changes). `--burp` routes the left window through Burp (`127.0.0.1:8082`), so every request appears live in Burp's HTTP history. `--step 3` starts at a step (no reset). `--keep` leaves the windows open. `--auto` runs without clicks (rehearsal). `--shots <folder>` saves a screenshot after every action (fresh fallback evidence).
+
+The runner drives the browser, not Burp's own screens. Burp Community cannot be scripted, so if the graders should see Intruder itself, run step 3 by hand as written below and the rest with the runner (`--step 4`). The attacker page in step 5 is a copy of `evidence/burp/csrf-poc.html` with a visible button instead of the instant auto-submit. The runner writes it to a temp folder.
+
+**Known gap found while building the runner (step 6).** The Media page uploads in chunks; its last call, `media_chunk_finish()` (`includes/media-video.php`), detects the real type with finfo and refuses the shell ("Unsupported file type (text/x-php)"). So the attack is blocked. But that refusal happens before `upload_check_image_path()`, so it is **not logged** as `upload_rejected`. The direct `files[]` request tested in UPL-01 is refused **and** logged. Fixing it means adding one `security_log('upload_rejected', …)` call in that branch. That is application code, so it is left for the team to decide.
 
 ## Pre-demo checklist (15 min before)
 
@@ -152,5 +172,7 @@ Re-run the seed (checklist step 2). It removes the test message, cart lines, loc
 **2026-11-14: runner with the Continue button, `--speed 0.7`.** A test helper clicked Continue about 4 s after each button appeared: 8 buttons, 8 clicks, 8 / 8 steps passed, and every step started only after its click. Step times after the click: about 8 s (1), 13 s (2), 48 s (3), 23 s (4), 17 s (5), 12 s (6), 6 s (7), 2 s (8). With no click the runner waits (checked for 25 s). Database re-seeded afterwards.
 
 **2026-11-14: click-gated version, `--speed 0.7`.** 8 step buttons + 10 in-step window switches = 18 buttons; the helper made 18 clicks, and nothing moved without one. 8 / 8 steps passed; database re-seeded afterwards.
+
+**2026-11-14: rebuilt runner (NEXT card → click → action → RESULT card), `--speed 0.7`.** 30 actions + Finish = 31 buttons; a test helper clicked each one about 3 s after it appeared, and nothing moved without a click. 8 / 8 steps passed; the database was re-seeded afterwards (`security_events` = 0). The first run of this version failed step 6 and exposed the logging gap described in "Automated run".
 
 **Still to rehearse by hand (UI only, same requests as above):** the Burp Intruder run and its results table (step 3), the Burp Repeater edits (step 5), the media-page error message (step 6), the optional `csrf-poc.html` run, and timing the full 8 minutes with both presenters. Record the date and result here after each hand rehearsal.
