@@ -162,6 +162,10 @@ function media_store_file(string $tmpPath, string $origName, ?array $poster, ?in
     }
 
     if (!isset(MEDIA_VIDEO_MIMES[$mime])) {
+        // Neither an image nor a video (e.g. PHP renamed to .jpg): log it like the image check does.
+        security_log('upload_rejected', 'warning', ['user_id' => $userId, 'details' => [
+            'reason' => 'type not allowed', 'mime' => $mime, 'client_name' => $rawName, 'size' => is_file($tmpPath) ? filesize($tmpPath) : 0,
+        ]]);
         throw new RuntimeException('Unsupported file type (' . $mime . '). Use JPG, PNG, WebP, GIF, SVG, MP4, MOV or WebM.');
     }
 

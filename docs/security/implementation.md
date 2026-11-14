@@ -1,6 +1,6 @@
 # Part 1 – Security Implementation (index)
 
-Four additional security controls (C1–C4), three hardening changes (H1–H3) and three static-analysis fixes (S1–S3). Each has its own notes file with Threat → Design → Files and functions (with line numbers) → How to verify → Evidence.
+Four additional security controls (C1–C4), three hardening changes (H1–H3) and three static-analysis fixes (S1–S3). Each has its own notes file with Threat → Design → Files and functions (with line numbers, checked against merged `main`) → How to verify → Evidence.
 
 | ID | Control | Notes | Branch |
 |---|---|---|---|
@@ -35,6 +35,7 @@ Merge order: **C1 first**, then C4 and the hardening branch (both contain C1's c
 | N4 | `includes/functions.php` `login_succeeded()` | Info | A successful login from one address clears the email's account-wide throttle counter for all addresses. The tight email + address counter is not affected. |
 | N5 | `account.php` registration and reset | Info | bcrypt only uses the first 72 bytes of a password, so the 128-character maximum allows characters that add no strength. Pre-hashing or a 72-byte cap would fix it. |
 | N6 | `account.php` (registration error) | Info | After a rejected registration the form comes back empty (name and email are not kept), which makes a stricter password policy more annoying than it needs to be. |
+| N7 | `includes/media-video.php` `media_store_file()` | Low | **Fixed 2026-11-14.** The admin Media page uploads in chunks; a file that is neither an image nor a video (e.g. PHP renamed `shell.php.jpg`) was refused ("Unsupported file type") but **not logged**, because the refusal came before the shared check that writes `upload_rejected`. Found while building the demo runner; now logged with reason "type not allowed" (line 166). Verified: the shell via the Media page path → refused + 1 `upload_rejected`; a real JPG through the same path still uploads. |
 
 ## Not done / limits
 

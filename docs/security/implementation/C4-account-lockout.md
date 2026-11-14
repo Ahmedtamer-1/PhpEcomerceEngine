@@ -12,7 +12,7 @@
 - Not done (optional in the spec): the "someone tried to sign in" email to the owner. Email sending is not configured in the test setup, so it could not be tested.
 
 **Files and functions**
-- `includes/functions.php`: `login_attempt_count()` :284, `login_lockout_remaining()` :296, `login_lockout_message()` :313, `login_failed()` :328 (delay and one-time lock log), `login_unlock()` :348.
+- `includes/functions.php`: `login_attempt_count()` :294, `login_lockout_remaining()` :306, `login_lockout_message()` :323, `login_failed()` :338 (delay and one-time lock log), `login_unlock()` :358.
 - `account.php:51`, `admin/login.php:23` (message), and the order of `security_log('login_failed')` before `login_failed()` in both.
 - `admin/users.php:50` (unlock handler), `:171` (button).
 

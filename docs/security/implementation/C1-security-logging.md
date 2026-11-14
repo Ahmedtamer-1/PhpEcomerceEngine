@@ -24,17 +24,17 @@ Note: `php -S` ignores `.htaccess`, so header and deny-rule checks (H1) need Apa
 |---|---|---|
 | `login_success` | info | `account.php:59`, `admin/login.php:36` |
 | `login_failed` | warning | `account.php:65`, `admin/login.php:43` |
-| `login_locked` | critical | `account.php:50`, `admin/login.php:22` |
-| `csrf_rejected` | warning | `includes/functions.php:168` (inside `csrf_verify()`) |
+| `login_locked` | critical | `includes/functions.php:346` (inside `login_failed()`, once when the limit is reached; used by `account.php` and `admin/login.php`) |
+| `csrf_rejected` | warning | `includes/functions.php:178` (inside `csrf_verify()`) |
 | `access_denied` | warning | `admin/includes/auth.php:12`, `admin/login.php:31`, `api/admin-products.php:14`, `api/media.php:12`, `api/sections.php:11`, `api/section-preview.php:30` |
 | `password_reset_requested` / `_completed` | info | `includes/password-reset.php:45`, `:97` |
-| `upload_rejected` | warning | `includes/functions.php:1296` (`media_upload()`); the other upload handlers are covered by H3 |
-| `role_changed` | critical | `admin/users.php:60` |
-| `logout` | info | `includes/functions.php:393` (`logout_user()`) |
+| `upload_rejected` | warning | `includes/functions.php:1471`, `:1502`, `:1506` (inside `upload_check_image_path()` / `upload_check_image()`, the shared H3 check every upload handler calls); `includes/media-video.php:166` (`media_store_file()`: files that are neither image nor video, added 2026-11-14, see N7) |
+| `role_changed` | critical | `admin/users.php:77` |
+| `logout` | info | `includes/functions.php:531` (`logout_user()`) |
 
 **Files and functions**
 - `includes/security-log.php` (new): `security_log_ensure_table()`, `security_log_clean()`, `security_log()`.
-- `includes/functions.php:9` requires it; `csrf_verify()` (:161) and `logout_user()` (:390) log.
+- `includes/functions.php:9` requires it; `csrf_verify()` (:171) and `logout_user()` (:528) log.
 - `admin/security.php` (new), sidebar link in `admin/includes/header.php` (after Activity Log).
 - `database/schema.sql` (`security_events`), `database/seed-security-test.sql` (truncate).
 

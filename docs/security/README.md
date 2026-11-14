@@ -13,7 +13,7 @@ All testing was performed **only on a local copy** of the site (Apache on localh
 | 3 | Security test cases and results | [test-cases.xlsx](test-cases.xlsx) |
 | 4 | Vulnerability Assessment Report | [Vulnerability-Assessment-Report.pdf](Vulnerability-Assessment-Report.pdf) |
 | 5 | Screenshots and security tool reports | [evidence/](evidence/) |
-| 6 | Presentation | [presentation.pptx](presentation.pptx) |
+| 6 | Short presentation and live demonstration | Slides built from a slides prompt (presented on the day) + [demo-script.md](demo-script.md) (live demo, ~8 min, with rehearsal log) |
 
 ## Supporting material
 
@@ -27,18 +27,22 @@ All testing was performed **only on a local copy** of the site (Apache on localh
 | [part1-controls-spec.md](part1-controls-spec.md) | What Part 1 builds (controls C1–C4, hardening H1–H3, fixes S1–S3) and when each is done |
 | [semgrep-lumeegy.yml](semgrep-lumeegy.yml) | Custom static-analysis rules for this codebase |
 | [semgrep-triage.md](semgrep-triage.md) | Baseline Semgrep results, each marked true or false positive |
-| [findings.md](findings.md) | All baseline findings in one list (Semgrep, ZAP, setup), each with severity and the control that fixes it |
-| [code-review.md](code-review.md) | Manual code review notes (to come) |
+| [findings.md](findings.md) | All baseline findings in one list (Semgrep, ZAP, setup, manual code review GAP-01..03), each with severity and the control that fixes it. Further code-review notes N1–N6 are in [implementation.md](implementation.md) |
+| [demo-script.md](demo-script.md) | Part 5: the rehearsable live-demo script, pre-demo checklist and rehearsal log |
 
 ## Evidence layout
 
 | Folder | Contents |
 |---|---|
-| `evidence/zap/` | **`zap-before-summary.html` (start here: clean summary with our verdict per alert)**, `zap-before.html` (raw ZAP report), `zap-after.html`, context and alert screenshots, `ajax-spider-before.csv` (the browser's own background requests to Bing/Azure were removed; they were not part of the test) |
+| `evidence/zap/` | **`zap-before-summary.html` (start here: clean summary with our verdict per alert)**, `zap-before.html` (raw ZAP report), alert screenshot, `ajax-spider-before.csv` (the browser's own background requests to Bing/Azure were removed; they were not part of the test) |
 | `evidence/burp/` | Repeater / Intruder / Proxy screenshots, named by test ID (`CSRF-02.png`), `csrf-poc.html` |
 | `evidence/semgrep/` | `semgrep-before.txt` / `.sarif`, `semgrep-after.txt` / `.sarif` |
 | `evidence/screenshots/` | Browser and admin-panel screenshots, named by test ID |
-| `evidence/sqlmap/` | Optional sqlmap output |
+| `evidence/sqlmap/` | sqlmap output (SQLI-02) |
+| `evidence/tests/` | Scripted request/response output per test ID (curl) |
+| `evidence/*.txt` | Part 1 verification and smoke-test output per control |
+
+No ZAP rescan was run after the fixes, so there is no `zap-after.html`. Part 3 is covered by the ZAP baseline, Burp, sqlmap and the Semgrep after-run; the header fixes are proven with direct `curl` output (`evidence/H1-headers-after.txt`).
 
 ## Methodology in one line
 

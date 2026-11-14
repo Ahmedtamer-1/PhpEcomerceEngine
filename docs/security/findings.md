@@ -32,7 +32,7 @@ ZAP baseline totals (localhost only): **0 High · 7 Medium · 6 Low · 16 Inform
 
 | Alert / result | Count | Reason |
 |---|---|---|
-| ZAP "Absence of Anti-CSRF Tokens" | 3 alert types | The flagged forms are admin forms, whose token is added at runtime by `admin/includes/csrf-script.php` from `<meta name="csrf-token">`, so ZAP's HTML parser can't see it. Proof that the protection works: every scanner POST to an admin form without the token was rejected with **403** (1,131 times in the access log). |
+| ZAP "Absence of Anti-CSRF Tokens" | 1 alert type, 3 instances | The flagged forms are admin forms, whose token is added at runtime by `admin/includes/csrf-script.php` from `<meta name="csrf-token">`, so ZAP's HTML parser can't see it. Proof that the protection works: every scanner POST to an admin form without the token was rejected with **403** (1,131 times in the access log). |
 | ZAP "Timestamp Disclosure – Unix" | 5 | The numbers are cache-busting asset versions (`?v=1791899996`), not server times. |
 | ZAP "User Controllable HTML Element Attribute (Potential XSS)" | 83 | Informational: request values echoed into attributes. The values are escaped with `h()`; confirmed manually in Part 2 (XSS-01). |
 | ZAP "Information Disclosure – Suspicious Comments" | 97 | Words like "TODO"/"admin" in HTML and JS comments; no secrets found when reviewed. |

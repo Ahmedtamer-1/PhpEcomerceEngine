@@ -16,7 +16,7 @@ Tested on Apache 2.4 (XAMPP build) at `http://localhost:8090`, because `php -S` 
 - Chart.js on admin pages: now `chart.umd.js` (same 4.4.1 build, not the CDN-generated `.min`) with `integrity="sha256-…"` and `crossorigin="anonymous"`. The hash is the one jsDelivr publishes for that file.
 - Not changed (residual risk, as agreed): CSP `'unsafe-inline'` and `https:` image sources; no SRI for the Google Fonts stylesheet (it differs per browser); no COEP (it would break the Paymob iframe and YouTube embeds).
 
-**Files:** `.htaccess:44-60`, `admin/includes/header.php:30`.
+**Files:** `.htaccess:49-65`, `admin/includes/header.php:30`.
 
 **How to verify** (`evidence/H1-headers-after.txt`, `evidence/H1-chart-sri.txt`)
 1. `curl -I` on `/`, on a 404 and on `/includes/` (403): all carry the security headers; none has `X-XSS-Protection` or `X-Powered-By`.
@@ -50,7 +50,7 @@ Tested on Apache 2.4 (XAMPP build) at `http://localhost:8090`, because `php -S` 
 
 Used by: `media_upload()` (library and product images, `api/media.php`, `api/admin-products.php`), `admin/variants.php`, `admin/settings.php` (logo, favicon, OG image), `includes/media-video.php` (chunked image uploads and video posters). Videos keep their own type whitelist and the 1 GB chunked limit. `admin/export.php` accepts a CSV that is only parsed, never stored, so it is out of scope.
 
-**Files:** `includes/functions.php:1291` (constant), `:1294` `upload_random_name()`, `:1305` `upload_svg_is_safe()`, `:1336` `upload_check_image_path()`, `:1370` `upload_check_image()`, `:1384` `media_upload()`; `admin/variants.php:74`, `admin/settings.php:72`, `includes/media-video.php:146` and `:189`.
+**Files:** `includes/functions.php:1419` (constant), `:1422` `upload_random_name()`, `:1433` `upload_svg_is_safe()`, `:1464` `upload_check_image_path()`, `:1498` `upload_check_image()`, `:1512` `media_upload()`; `admin/variants.php:74`, `admin/settings.php:72`, `includes/media-video.php:146` and `:189`.
 
 **How to verify** (`evidence/H3-upload-before.txt`, `H3-upload-after.txt`; real multipart uploads through an admin session)
 

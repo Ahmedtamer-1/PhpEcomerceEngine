@@ -15,12 +15,13 @@ The brief requires at least one tool with screenshots and reports. This project 
 Three layers, each cross-checking the others:
 
 1. **SAST — Semgrep + manual code review.** Reads the source without running it. Run before Part 1 (baseline) and after (to show the fixes). 201 raw results triaged to 9 true positives at baseline; all static true positives closed after Part 1.
-2. **DAST — OWASP ZAP.** Authenticated active scan of the running site (guest / customer / admin contexts, Protected Mode, logout and callback URLs excluded). The baseline active scan was stopped early for time; passive checks covered every crawled page. Result: 0 High, 7 Medium, 6 Low, 16 Info — all triaged (fixed / false positive / accepted) in [findings.md](findings.md).
+2. **DAST — OWASP ZAP.** Authenticated scan of the running site (Spider + AJAX Spider + Active Scan, logged in as the test admin, Protected Mode, logout and callback URLs excluded). The baseline active scan was stopped early for time; passive checks covered every crawled page. Result: 0 High, 7 Medium, 6 Low, 16 Info — all triaged (fixed / false positive / accepted) in [findings.md](findings.md).
 3. **Manual — Burp + sqlmap + curl.** The attacks automation can't judge: IDOR, RBAC bypass, lockout, CSRF, upload tricks, business-logic tampering. These are the 16 cases in [test-cases.md](test-cases.md).
 
 Severity for confirmed findings is scored with **CVSS 3.1** and mapped to **OWASP WSTG** in the report.
 
-## Notes on the two automated scans
+## Notes on scope and tool limits
 
-- **Both ZAP runs were time-boxed** (the baseline active scan was stopped at 23%). To cover what the scanner didn't reach, **SQL injection and XSS were verified manually** (SQLI-01/02, XSS-01/02) with Burp, sqlmap and curl.
+- **No ZAP rescan after the fixes.** The planned "after" scan was skipped for time, so there is no `zap-after.html`. The fixes to ZAP's header findings are shown with direct `curl` checks (`evidence/H1-headers-after.txt`, `H1-chart-sri.txt`); the before → after comparison for automation is the Semgrep rerun.
+- **The ZAP active scan was time-boxed** (stopped at 23%, 47,820 requests). To cover what the scanner didn't reach, **SQL injection and XSS were verified manually** (SQLI-01/02, XSS-01/02) with Burp, sqlmap and curl.
 - **Burp Community limits** we worked around: Intruder is rate-limited (fine — we only needed enough attempts to trigger the lockout); there is no active scanner (that role is ZAP's); the CSRF PoC generator is Pro-only (the attacker page was hand-written, `evidence/burp/csrf-poc.html`).
