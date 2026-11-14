@@ -41,7 +41,7 @@ Options: `--speed` scales the short holds inside an action (typing speed never c
 
 The runner drives the browser, not Burp's own screens. Burp Community cannot be scripted, so if the graders should see Intruder itself, run step 3 by hand as written below and the rest with the runner (`--step 4`). The attacker page in step 5 is a copy of `evidence/burp/csrf-poc.html` with a visible button instead of the instant auto-submit. The runner writes it to a temp folder.
 
-**Known gap found while building the runner (step 6).** The Media page uploads in chunks; its last call, `media_chunk_finish()` (`includes/media-video.php`), detects the real type with finfo and refuses the shell ("Unsupported file type (text/x-php)"). So the attack is blocked. But that refusal happens before `upload_check_image_path()`, so it is **not logged** as `upload_rejected`. The direct `files[]` request tested in UPL-01 is refused **and** logged. Fixing it means adding one `security_log('upload_rejected', …)` call in that branch. That is application code, so it is left for the team to decide.
+**Gap found while building the runner, now fixed (step 6, N7).** The Media page uploads in chunks; `media_store_file()` (`includes/media-video.php`) detected the real type with finfo and refused the shell ("Unsupported file type (text/x-php)"), but did not log it. The refusal came before the shared check that writes `upload_rejected`. It now logs `upload_rejected` with reason "type not allowed". So step 6 shows **two** `upload_rejected` rows: one from the Media page, one from the direct `files[]` request that UPL-01 tested in Burp.
 
 ## Pre-demo checklist (15 min before)
 
@@ -174,5 +174,7 @@ Re-run the seed (checklist step 2). It removes the test message, cart lines, loc
 **2026-11-14: click-gated version, `--speed 0.7`.** 8 step buttons + 10 in-step window switches = 18 buttons; the helper made 18 clicks, and nothing moved without one. 8 / 8 steps passed; database re-seeded afterwards.
 
 **2026-11-14: rebuilt runner (NEXT card → click → action → RESULT card), `--speed 0.7`.** 30 actions + Finish = 31 buttons; a test helper clicked each one about 3 s after it appeared, and nothing moved without a click. 8 / 8 steps passed; the database was re-seeded afterwards (`security_events` = 0). The first run of this version failed step 6 and exposed the logging gap described in "Automated run".
+
+**2026-11-14: after the N7 fix (`--auto`).** 8 / 8 steps passed; step 6 logged 2 `upload_rejected` (Media page + direct request). Database re-seeded.
 
 **Still to rehearse by hand (UI only, same requests as above):** the Burp Intruder run and its results table (step 3), the Burp Repeater edits (step 5), the media-page error message (step 6), the optional `csrf-poc.html` run, and timing the full 8 minutes with both presenters. Record the date and result here after each hand rehearsal.
