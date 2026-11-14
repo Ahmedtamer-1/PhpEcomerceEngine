@@ -62,7 +62,7 @@ Run them **in this order**: read-only tests first, data-changing tests last, so 
 | ZAP | Same context and exclusions as the baseline; Spider logged in as admin → Active Scan. **Stop at 25% or 15 min** | 20 min | `zap-after.html` + Alerts screenshot. Before → after counts by risk in `findings.md`. Expected: ZAP-02, ZAP-04 and the header alerts gone; CSP `unsafe-inline` remains (accepted) |
 | tools.md | One table | 10 min | Semgrep 1.185, ZAP 2.17, Burp Community, sqlmap 1.10: what each covered, which test IDs |
 
-Both ZAP runs were stopped early for time; SQLi and XSS are covered by SQLI-01/02 and XSS-01/02 instead. Say this in `tools.md`.
+**As run:** the baseline ZAP active scan was stopped early for time, and the ZAP rescan was **skipped** (no `zap-after.html`). SQLi and XSS are covered by SQLI-01/02 and XSS-01/02 instead; the header fixes are shown with `curl` (`evidence/H1-headers-after.txt`). Both points are stated in `tools.md` and the report.
 
 ## Rules while testing
 
